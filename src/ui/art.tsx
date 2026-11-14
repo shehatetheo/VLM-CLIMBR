@@ -111,9 +111,9 @@ const BUBBLES: [number, number, number, number, number][] = [
 
 // 3D holds that drift at the edges of the page: [hold, css position, size px, seconds, depth].
 const FLOATERS: [number, CSSProperties, number, number, number][] = [
-  [3, { right: -26, top: '24%' }, 96, 26, 1],
-  [2, { left: -18, top: '55%' }, 66, 21, 1],
-  [6, { right: '6%', bottom: '15%' }, 84, 31, 1],
+  [3, { right: -44, top: '22%' }, 96, 26, 1],
+  [2, { left: -30, top: '56%' }, 66, 21, 1],
+  [6, { right: -38, bottom: '11%' }, 84, 31, 1],
 ]
 
 /** The living layer behind every tab: two slow pools of light, glossy 3D holds

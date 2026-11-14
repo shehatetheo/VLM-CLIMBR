@@ -48,8 +48,7 @@
 .fx-ripple i { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22) 62%, transparent); transform: scale(0); animation: ripple 0.6s ease-out forwards; }
 @keyframes ripple { to { transform: scale(1); opacity: 0; } }
 
-/* The tab bar: the glossy pill slides between tabs (framer-motion), the icon
-   hops, and the marker scribble draws itself in. */
+/* The tab bar: the glossy pill slides between tabs (framer-motion) and the icon hops. */
 .blade.on { background: none; border-color: transparent; box-shadow: none; }
 .blade.on::before { display: none; }
 .blade-pill { position: absolute; inset: 0; border-radius: 16px; background: linear-gradient(180deg, var(--primary-a), var(--primary-b)); border: 1px solid var(--primary-edge); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 -8px 12px -6px rgba(0, 0, 0, 0.25); }
@@ -58,8 +57,6 @@
 .blade-icon { position: relative; display: grid; transition: transform 0.4s var(--spring); }
 .blade.on .blade-icon { animation: hop 0.55s var(--spring); }
 @keyframes hop { 0% { transform: none; } 35% { transform: translateY(-5px) scale(1.18) rotate(-6deg); } 100% { transform: none; } }
-.blade .scribble path { stroke-dasharray: 70; stroke-dashoffset: 70; animation: draw 0.5s 0.15s var(--ease) forwards; }
-@keyframes draw { to { stroke-dashoffset: 0; } }
 
 /* The session tabs (breakdown / replay / reel) get the same sliding pill. */
 .tabs .tab.on { background: none; border-color: transparent; box-shadow: none; }
@@ -71,7 +68,7 @@
 
 /* Props: the hand pops and a ring bursts off the button. */
 .feed-rail button.on svg { animation: pop 0.5s var(--spring); }
-.feed-rail button.on::after { content: ''; position: absolute; inset: -3px; border-radius: 21px; border: 3px solid #a6e86c; pointer-events: none; animation: burst 0.6s ease-out forwards; }
+.feed-rail button.on::after { content: ''; position: absolute; inset: -3px; border-radius: 21px; border: 3px solid var(--primary-a); pointer-events: none; animation: burst 0.6s ease-out forwards; }
 @keyframes pop { 0% { transform: scale(0.6) rotate(-14deg); } 55% { transform: scale(1.3) rotate(8deg); } 100% { transform: none; } }
 @keyframes burst { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.45); opacity: 0; } }
 
@@ -110,8 +107,8 @@
 .bubble {
   display: block; border-radius: 50%; opacity: 0.8; animation: sway ease-in-out infinite alternate;
   background:
-    radial-gradient(circle at 32% 27%, rgba(255, 255, 255, 0.95) 0 7%, rgba(255, 255, 255, 0.3) 13%, transparent 40%),
-    radial-gradient(circle, transparent 56%, color-mix(in srgb, var(--art) 30%, transparent) 72%, rgba(255, 255, 255, 0.6) 91%, transparent 100%);
+    radial-gradient(circle at 32% 27%, rgba(255, 255, 255, 0.9) 0 7%, rgba(255, 255, 255, 0.25) 13%, transparent 40%),
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.08) 0 58%, color-mix(in srgb, var(--art) 32%, transparent) 80%, rgba(255, 255, 255, 0.65) 95%, transparent 100%);
 }
 @keyframes rise { 0% { transform: translate3d(0, 0, 0); opacity: 0; } 8% { opacity: 1; } 82% { opacity: 1; } 100% { transform: translate3d(0, -118vh, 0); opacity: 0; } }
 @keyframes sway { from { transform: translateX(calc(var(--sway) * -1)); } to { transform: translateX(var(--sway)); } }
@@ -129,18 +126,16 @@
 
 /* ── less motion ─────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .gbtn::after, .aurora, .bubble-path, .bubble, .twinkle, .sonar, .march, .backdrop .pan, .blade-icon, .blade .scribble path,
+  .gbtn::after, .aurora, .bubble-path, .bubble, .twinkle, .sonar, .march, .backdrop .pan, .blade-icon,
   .feed-rail button.on svg, .feed-rail button.on::after, .score-card .sticker, .tiles > * { animation: none !important; }
-  .blade .scribble path { stroke-dashoffset: 0; }
   .bubble-path, .sonar, .go::before, .go::after, .fx-ripple { display: none; }
 }
 
-/* ── 3D art (generated with Higgsfield, recolored per theme) ─────────────── */
-/* Illustrations bob in place; their shadow is baked into a static filter. */
-.art-3d { display: block; width: var(--art-size, auto); max-width: 62vw; height: auto; filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.35)); animation: bob 4.8s ease-in-out infinite; }
-@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-9px) rotate(1.5deg); } }
-.feed-msg .art-3d { margin-bottom: calc(var(--s-2) * -1); }
-.analyze-oops { align-self: center; margin: var(--s-2) 0 0; }
+/* ── art ─────────────────────────────────────────────────────────────────── */
+/* Empty and error screens: a plain icon in a soft ring of the theme's color. */
+.empty-icon { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 50%; color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); animation: rise-in 0.5s var(--ease) both; }
+.feed-msg .empty-icon { color: var(--primary-a); background: color-mix(in srgb, var(--primary-a) 12%, transparent); border-color: color-mix(in srgb, var(--primary-a) 40%, transparent); }
+.analyze-oops { align-self: center; margin: var(--s-4) 0 var(--s-2); color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
 
 /* Holds drifting at the page edges, turning slowly, like they float in water. */
 .float-hold { position: absolute; z-index: 1; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.35)); will-change: transform; animation: float-hold 26s ease-in-out infinite alternate; }
@@ -149,4 +144,4 @@
   50% { transform: translate3d(calc(var(--spin) * 10px), -22px, 0) rotate(calc(var(--spin) * 10deg)); }
   100% { transform: translate3d(calc(var(--spin) * -6px), 14px, 0) rotate(calc(var(--spin) * 24deg)); }
 }
-@media (prefers-reduced-motion: reduce) { .art-3d, .float-hold { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .empty-icon, .float-hold { animation: none !important; } }

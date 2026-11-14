@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, FileVideo, Loader2, RotateCcw, SearchX, Sparkles, Upload, X, XCircle } from 'lucide-react'
+import { CheckCircle2, FileVideo, Loader2, RotateCcw, SearchX, Sparkles, TriangleAlert, Upload, X, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ConnectKey } from '../components/ConnectKey'
 import { toast } from '../components/Toast'
@@ -10,7 +10,7 @@ import { clipFrom, filesFromDataTransfer, fmtBytes, isVideo, videoMeta, type Cli
 import { failedChecks, sessionFromLive } from '../lib/live'
 import { getPrefs, saveSession } from '../lib/store'
 import { ROUTE_COLORS, type Check, type Session } from '../lib/types'
-import { Art3D, Logo, RingBurst, SectionHeader } from '../ui'
+import { EmptyIcon, Logo, RingBurst, SectionHeader } from '../ui'
 import { buildWallPlate } from '../lib/wallplate'
 
 const GRADES = ['VB', 'V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7+']
@@ -226,7 +226,7 @@ function AnalyzeOverlay({ run, onRetry, onClose }: { run: Run; onRetry: () => vo
   return (
     <motion.div className="analyze" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.div className={`analyze-card glass ${failed ? 'failed' : ''}`} initial={{ y: 40 }} animate={{ y: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 36 }}>
-        {failed || empty ? <Art3D name="oops" size={130} className="analyze-oops" /> : (
+        {failed || empty ? <EmptyIcon icon={failed ? TriangleAlert : SearchX} className="analyze-oops" /> : (
           <div className={`pulse-hold ${done ? 'still' : ''}`} aria-hidden>
             <i /><i /><i />
             <img src="/icons/icon-192.png" alt="" />

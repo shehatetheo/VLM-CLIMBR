@@ -1,9 +1,8 @@
 // The component kit. Each one is a thin wrapper over a material class in
 // styles/metro.css, so the look lives in one place.
 import { AnimatePresence, motion } from 'framer-motion'
-import { BarChart3, Compass, Settings, Upload } from 'lucide-react'
+import { BarChart3, Compass, Settings, Upload, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react'
-import { Scribble } from './art'
 import { useLook } from './look'
 
 export { Backdrop, ChalkDrip, Halftone, RingBurst, Scribble, Skyline, StarField, Swoosh } from './art'
@@ -92,7 +91,6 @@ export function BladeTabBar({ active, go }: { active: TabId | null; go: (href: s
           <button key={t.id} className={`blade ${active === t.id ? 'on' : ''}`} aria-current={active === t.id ? 'page' : undefined} onClick={() => go(t.href)}>
             {active === t.id && <motion.i layoutId="blade-pill" className="blade-pill" transition={PILL_SPRING} />}
             <span className="blade-icon" key={active === t.id ? 'on' : 'off'}>{t.icon}</span><span>{t.label}</span>
-            {active === t.id && <Scribble className="scribble" />}
           </button>
         ))}
       </div>
@@ -101,7 +99,8 @@ export function BladeTabBar({ active, go }: { active: TabId | null; go: (href: s
 }
 
 /** The wordmark, in the slime of the current color: lime is the original as
- *  supplied, sunset and midnight are recolors of it. A new color crossfades in. */
+ *  supplied, sunset and midnight are exact hue shifts of it (same gloss, same
+ *  lettering). A new color crossfades in. */
 export function Logo({ height = 32, className = '' }: { height?: number; className?: string }) {
   const { theme } = useLook()
   const base = theme === 'sunset' || theme === 'midnight' ? `/brand/logo-${theme}` : '/brand/logo'
@@ -116,9 +115,7 @@ export function Logo({ height = 32, className = '' }: { height?: number; classNa
   )
 }
 
-/** A glossy 3D illustration (made with Higgsfield), in the current color.
- *  `climbs-empty`, `feed-empty` and `oops`; it bobs gently in place. */
-export function Art3D({ name, size = 200, className = '' }: { name: 'climbs-empty' | 'feed-empty' | 'oops'; size?: number; className?: string }) {
-  const { theme } = useLook()
-  return <img className={`art-3d ${className}`} src={`/art/${name}-${theme}.webp`} alt="" width={size} height={size} loading="lazy" decoding="async" />
+/** A plain icon in a soft ring, for empty and error screens. */
+export function EmptyIcon({ icon: Icon, className = '' }: { icon: LucideIcon; className?: string }) {
+  return <span className={`empty-icon ${className}`} aria-hidden><Icon size={34} strokeWidth={1.75} /></span>
 }

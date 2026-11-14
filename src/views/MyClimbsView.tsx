@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Globe, Lock, Play, Trash2, Upload, X } from 'lucide-react'
+import { Globe, Lock, MountainSnow, Play, Trash2, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '../components/Toast'
 import { cloudEnabled, deleteClimb, listMyClimbs, setVisibility, type CloudClimb } from '../lib/cloud'
@@ -7,7 +7,7 @@ import { coachScore, secs } from '../lib/score'
 import { climbStatus, type ClimbStatus } from '../lib/status'
 import { deleteSession, listSessions, type StoredSession } from '../lib/store'
 import type { Session } from '../lib/types'
-import { Art3D, GlossButton, Logo, SectionHeader, StickerBadge } from '../ui'
+import { EmptyIcon, GlossButton, Logo, SectionHeader, StickerBadge } from '../ui'
 
 interface Tile { key: string; open: string; title: string; thumb: string | null; score: number; status: ClimbStatus; time: string; local: StoredSession | null; cloud: CloudClimb | null; example?: boolean }
 
@@ -61,7 +61,7 @@ export function MyClimbsView({ example, go }: { example: Session | null; go: (h:
         {tiles === null && <div className="tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="tile skel" />)}</div>}
         {tiles !== null && all.length === 0 && (
           <div className="empty">
-            <Art3D name="climbs-empty" size={190} />
+            <EmptyIcon icon={MountainSnow} />
             <h3>no climbs yet</h3>
             <p>Go send something. Film one attempt and get your first Coach Score.</p>
             <GlossButton size="lg" onClick={() => go('#/analyze')}><Upload size={18} /> analyze a climb</GlossButton>

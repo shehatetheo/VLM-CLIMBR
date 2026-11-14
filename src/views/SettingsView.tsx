@@ -85,7 +85,7 @@ export function SettingsView({ health, onHealth, go }: { health: Health | null; 
             <button className="row" onClick={() => go('#/welcome')}><span className="grow"><b>replay the intro</b><span>how to film and what you get</span></span></button>
           </div>
           <p className="fine">No location is stored or shown. Videos you save are private unless you share them to the feed.</p>
-          <p className="fine">Example footage: jeremyipark/vision-demos (Apache-2.0). 3D art and themed logos made with Higgsfield. Typeface: Selawik (SIL OFL).</p>
+          <p className="fine">Example footage: jeremyipark/vision-demos (Apache-2.0). Floating 3D holds made with Higgsfield. Typeface: Selawik (SIL OFL).</p>
         </div>
       </div>
     </section>
