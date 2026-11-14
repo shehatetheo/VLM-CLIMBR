@@ -18,7 +18,7 @@ create extension if not exists pgcrypto with schema extensions;
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null unique check (username ~ '^[A-Za-z0-9]{3,24}$'),
-  theme text not null default 'lime' check (theme in ('lime', 'sunset', 'midnight')),
+  theme text not null default 'lime' check (theme in ('lime', 'sunset', 'dusk')),
   created_at timestamptz not null default now()
 );
 

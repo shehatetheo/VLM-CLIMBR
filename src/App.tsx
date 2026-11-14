@@ -1,8 +1,8 @@
 import { SearchX } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Toaster } from './components/Toast'
-import { health as fetchHealth, loadExample, type Health } from './lib/api'
+import { health as fetchHealth, loadBundled, loadExample, type Health } from './lib/api'
 import { whoosh } from './lib/sound'
 import { getPrefs, loadSession } from './lib/store'
 import type { Session } from './lib/types'
@@ -52,6 +52,7 @@ export default function App() {
   useEffect(() => {
     fetchHealth().then(setHealth)
     loadExample().then((s) => setSessions((m) => ({ ...m, [s.id]: s }))).catch((e) => setError(String(e)))
+    loadBundled('oliver').then((s) => { if (s) setSessions((m) => ({ ...m, [s.id]: s })) })
   }, [])
 
   const go = useCallback((hash: string) => {
@@ -71,7 +72,8 @@ export default function App() {
   }, [route, sessions, addSession])
 
   const active = route.name === 'session' ? sessions[route.id] : undefined
-  const example = sessions['example-green-vb'] ?? null
+  // The examples, newest first: climbs recorded with the app, then the bundled demo.
+  const examples = useMemo(() => ['example-oliver', 'example-green-vb'].map((id) => sessions[id]).filter(Boolean), [sessions])
 
   if (route.name === 'welcome') return <div className="app"><Onboarding key="welcome" onDone={(to) => go(to)} /><Toaster /></div>
   if (route.name === 'admin') return <div className="app"><AdminView go={go} /><Toaster /></div>
@@ -84,9 +86,9 @@ export default function App() {
           <AnimatePresence mode="popLayout" initial={false} custom={dir}>
             {isTab(route) ? (
               <motion.div key={route.name} className="blade-page" custom={dir} initial={{ x: `${dir * 28}%`, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: `${dir * -28}%`, opacity: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 38 }}>
-                {route.name === 'feed' && <FeedView example={example} go={go} />}
+                {route.name === 'feed' && <FeedView examples={examples} go={go} />}
                 {route.name === 'analyze' && <ImportView health={health} onHealth={setHealth} onSession={(s) => { addSession(s); go(`#/session/${encodeURIComponent(s.id)}/results`) }} />}
-                {route.name === 'climbs' && <MyClimbsView example={example} go={go} />}
+                {route.name === 'climbs' && <MyClimbsView examples={examples} go={go} />}
                 {route.name === 'settings' && <SettingsView health={health} onHealth={setHealth} go={go} />}
               </motion.div>
             ) : active ? (

@@ -302,7 +302,7 @@
 /* Onboarding phone: a slim graphite phone floating over its own soft shadow,
    playing the example clip with a camera viewfinder (step 1) or a scan (step 2). */
 .cam-stage { position: relative; flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; padding-bottom: 18px; }
-.cam-glow { position: absolute; left: 50%; top: 46%; width: 120%; max-width: 460px; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, var(--glow), transparent 72%); opacity: 0.45; pointer-events: none; }
+.cam-glow { position: absolute; left: 50%; top: 46%; width: min(110%, 88vw); max-width: 440px; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, var(--glow), transparent 72%); opacity: 0.45; pointer-events: none; }
 .cam-phone { position: relative; flex: 1; min-height: 0; aspect-ratio: 9 / 16.6; max-width: min(100%, 300px); padding: 7px; border-radius: 38px; background: linear-gradient(150deg, #4b545b 0%, #22282d 38%, #121619 70%, #2c3338 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 2px 0 rgba(0, 0, 0, 0.3); animation: cam-float 5.5s ease-in-out infinite; }
 .cam-phone::before, .cam-phone::after { content: ''; position: absolute; width: 3px; border-radius: 2px; background: linear-gradient(90deg, #5a636a, #2a3035); }
 .cam-phone::before { left: -3px; top: 20%; height: 9%; box-shadow: 0 calc(100% + 34px) 0 #3a4248; }

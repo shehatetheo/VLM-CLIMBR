@@ -1,7 +1,7 @@
 /* ─── CLIMBR · Frutiger Metro ────────────────────────────────────────────────
    Tokens first, then materials (gloss, capsule, chrome, glass), then the app.
    Two attributes on <html> pick the tokens: data-mode (dark, the default, or
-   light) and data-theme, the color (lime, sunset, midnight). The color sets the
+   light) and data-theme, the color (lime, sunset, dusk). The color sets the
    glossy buttons; the mode and color together set the page, panels and text. */
 
 @font-face { font-family: 'Selawik'; font-weight: 300; font-display: swap; src: url('/fonts/selawik-light.woff2') format('woff2'); }
@@ -41,7 +41,7 @@
 }
 /* color: the glossy primary, the same in both modes */
 :root[data-theme='sunset'] { --primary-a: #ffb347; --primary-b: #f07a00; --primary-edge: #a34f00; --on-primary: #2b1400; }
-:root[data-theme='midnight'] { --primary-a: #e6eef9; --primary-b: #9db3d6; --primary-edge: #5d769f; --on-primary: #0c1a33; }
+:root[data-theme='dusk'] { --primary-a: #f1eefb; --primary-b: #b4abd8; --primary-edge: #6f6699; --on-primary: #1a1533; }
 
 /* light pages for the other two colors (light lime is :root above) */
 :root[data-theme='sunset']:not([data-mode='dark']) {
@@ -51,12 +51,12 @@
   --accent: #b85c00; --accent-ink: #7a3c00;
   --surface-2: #fbeedd; --surface-3: #f1ddc4; --border: #ead2b5; --border-2: #d6b38a; --bg-2: #ffe9c9;
 }
-:root[data-theme='midnight']:not([data-mode='dark']) {
-  --bg-a: #f4f8ff; --bg-b: #cbdaf2; --bg-c: #8ea8d4; --art: #24406f; --art-2: #ffffff; --on-bg: #0e1f3d; --on-bg-2: #2b4266;
-  --panel-a: #ffffff; --panel-b: #eef3fb; --panel-edge: #b5c6e2;
-  --text: #0f1a2e; --text-2: #35465e; --text-3: #55657c;
-  --accent: #2f5fa8; --accent-ink: #1d3f78;
-  --surface-2: #e8eef8; --surface-3: #d5e0f0; --border: #c6d4ea; --border-2: #9fb3d4; --bg-2: #dfe8f6;
+:root[data-theme='dusk']:not([data-mode='dark']) {
+  --bg-a: #f8f6ff; --bg-b: #dcd4f3; --bg-c: #a99cd8; --art: #3d3373; --art-2: #ffffff; --on-bg: #1d1740; --on-bg-2: #3b3366;
+  --panel-a: #ffffff; --panel-b: #f3f0fb; --panel-edge: #c8bfe6;
+  --text: #17132b; --text-2: #3c3658; --text-3: #5c5679;
+  --accent: #5b48b8; --accent-ink: #3a2c85;
+  --surface-2: #eeeaf8; --surface-3: #ddd6f1; --border: #d3cbec; --border-2: #a99fd0; --bg-2: #e6e0f6;
 }
 
 /* dark: the default. A near-black page lit from the top by the theme color. */
@@ -81,13 +81,13 @@
   --surface: #24180f; --surface-2: #2f2014; --surface-3: #3d2a1a; --border: #4a3220; --border-2: #6a4a2e; --bg: #120a05; --bg-2: #1d120a;
   --glow: rgba(255, 160, 60, 0.55);
 }
-:root[data-mode='dark'][data-theme='midnight'] {
-  --bg-a: #24406f; --bg-b: #12233f; --bg-c: #070f20; --art: #b9cdf2; --art-2: #ffffff; --on-bg: #eef4ff; --on-bg-2: #c3d2ee;
-  --panel-a: #22355a; --panel-b: #17274a; --panel-edge: #3d5484;
-  --text: #f1f5ff; --text-2: #c2cee6; --text-3: #9fb0d0;
-  --accent: #a9c6ff; --accent-ink: #d7e5ff;
-  --surface: #1d2f52; --surface-2: #26395f; --surface-3: #33486f; --border: #34496f; --border-2: #4a6290; --bg: #0b1530; --bg-2: #101f3a;
-  --glow: rgba(150, 190, 255, 0.5);
+:root[data-mode='dark'][data-theme='dusk'] {
+  --bg-a: #3d3474; --bg-b: #1a1637; --bg-c: #0a0918; --art: #c9bdf5; --art-2: #ffffff; --on-bg: #f4f1ff; --on-bg-2: #cbc4e8;
+  --panel-a: #2a2552; --panel-b: #1d1940; --panel-edge: #463f7a;
+  --text: #f4f2ff; --text-2: #cdc7e8; --text-3: #a9a2cc;
+  --accent: #c2b5ff; --accent-ink: #ddd5ff;
+  --surface: #221e47; --surface-2: #2b2654; --surface-3: #383266; --border: #3a3468; --border-2: #534c8a; --bg: #100e24; --bg-2: #17142f;
+  --glow: rgba(185, 165, 255, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -145,7 +145,6 @@ a { color: inherit; text-decoration: none; }
 /* In the dark the tab bar turns gunmetal: still chrome, without the glare. */
 :root[data-mode='dark'] .blades-bar.chrome { background: linear-gradient(180deg, #3a4540 0%, #222a26 45%, #151a17 100%); border-color: rgba(255, 255, 255, 0.14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.5), 0 12px 28px -8px rgba(0, 0, 0, 0.8); }
 :root[data-mode='dark'] .blade:not(.on) { color: #c9d4cc; }
-.reflect { -webkit-box-reflect: below 4px linear-gradient(transparent 62%, rgba(0, 0, 0, 0.22)); }
 .grain::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.5; mix-blend-mode: soft-light; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 
 /* Sticker: a tilted badge with a white die-cut border. SENT! / so close / example. */

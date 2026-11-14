@@ -153,7 +153,7 @@ export function onDeviceFeedback(s: Session): CoachFeedback {
   return {
     source: 'on-device',
     headline: s.toppedOut ? `Clean send in ${elapsed.toFixed(2)} s on ${used} holds` : `${used} holds in — the top is next`,
-    summary: `You ${s.toppedOut ? 'topped out' : 'climbed'} the ${s.route.color} ${s.route.grade} using ${used} of ${s.holdsDetected} holds. ${ins.find((i) => i.id === 'rank')?.detail ?? ''} Your ${top ? `${LIMB_BY_KEY[top.limb].name} on ${top.holdId}` : 'grip'} carried the middle of the climb.`.trim(),
+    summary: `You ${s.toppedOut ? 'topped out' : 'climbed'} the ${s.route.color}${s.route.grade ? ` ${s.route.grade}` : ''} route using ${used} of ${s.holdsDetected} holds. ${ins.find((i) => i.id === 'rank')?.detail ?? ''} Your ${top ? `${LIMB_BY_KEY[top.limb].name} on ${top.holdId}` : 'grip'} carried the middle of the climb.`.trim(),
     score,
     scores,
     strengths: ins.filter((i) => i.tone === 'good').slice(0, 3).map((i) => ({ title: i.title, detail: i.detail })),

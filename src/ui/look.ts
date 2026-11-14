@@ -9,9 +9,9 @@ const watch = (on: () => void) => {
   return () => mo.disconnect()
 }
 
-export type LookTheme = 'lime' | 'sunset' | 'midnight'
+export type LookTheme = 'lime' | 'sunset' | 'dusk'
 export function useLook() {
   const theme = useSyncExternalStore(watch, () => document.documentElement.dataset.theme ?? 'lime') as LookTheme
   const mode = useSyncExternalStore(watch, () => document.documentElement.dataset.mode ?? 'dark')
-  return { theme: (['lime', 'sunset', 'midnight'].includes(theme) ? theme : 'lime') as LookTheme, mode }
+  return { theme: (['lime', 'sunset', 'dusk'].includes(theme) ? theme : 'lime') as LookTheme, mode }
 }

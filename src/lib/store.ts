@@ -96,11 +96,15 @@ export async function deleteSession(id: string) {
 }
 
 const PREFS = 'climbr:prefs'
-export type Theme = 'lime' | 'sunset' | 'midnight'
+export type Theme = 'lime' | 'sunset' | 'dusk'
 export type Mode = 'dark' | 'light'
 export interface Prefs { onboarded?: boolean; name?: string; grade?: string; color?: string; letters?: boolean; theme?: Theme; mode?: Mode; sounds?: boolean; username?: string }
 export function getPrefs(): Prefs {
-  try { return JSON.parse(localStorage.getItem(PREFS) ?? '{}') } catch { return {} }
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS) ?? '{}')
+    if (p.theme === 'midnight') p.theme = 'dusk' // the old name
+    return p
+  } catch { return {} }
 }
 export function setPrefs(p: Prefs) {
   try { localStorage.setItem(PREFS, JSON.stringify({ ...getPrefs(), ...p })) } catch { /* private mode */ }
@@ -108,8 +112,8 @@ export function setPrefs(p: Prefs) {
 
 // The browser's own chrome (status bar, address bar) matches the top of the page.
 const THEME_COLOR: Record<Mode, Record<Theme, string>> = {
-  dark: { lime: '#14300d', sunset: '#3a1c06', midnight: '#1b3056' },
-  light: { lime: '#c4ec8f', sunset: '#ffc46b', midnight: '#cbdaf2' },
+  dark: { lime: '#14300d', sunset: '#3a1c06', dusk: '#221c46' },
+  light: { lime: '#c4ec8f', sunset: '#ffc46b', dusk: '#dcd4f3' },
 }
 /** A look is two attributes on <html>: the mode (dark by default) and the color. */
 export function applyTheme(theme: Theme = getPrefs().theme ?? 'lime', mode: Mode = getPrefs().mode ?? 'dark') {

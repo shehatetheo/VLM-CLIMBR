@@ -51,7 +51,7 @@ export function ResultsView({ session: s, tl, health, onUpdate, onPick, onSeek, 
       {/* 1 · Coach Score */}
       <section className="panel score-card" aria-label="Coach Score">
         <div className="score-top">
-          <div className="reflect"><ScoreBadge value={score.total} /></div>
+          <ScoreBadge value={score.total} />
           <div className="score-head">
             <span className="eyebrow">coach score</span>
             <h2>{score.total} · {score.label.toLowerCase()}</h2>

@@ -49,8 +49,8 @@ The functions bundle `ffmpeg-static`, so clips (including iPhone HDR `.mov`) are
 | | |
 |---|---|
 | **Tabs** | A chrome bar in the thumb zone: **feed**, **analyze**, **my climbs**, **settings**. The glossy pill slides to the tab you pick. |
-| **Looks** | Dark by default, with a light-mode switch in Settings, and three colors: lime, sunset, midnight. All of it is CSS tokens on `<html data-mode data-theme>` (`src/styles/metro.css`). |
-| **Logo and 3D art** | The logo follows the color: lime is the original; sunset and midnight are exact hue shifts of it, same gloss and lettering. Glossy 3D holds, generated with Higgsfield and recolored per theme by shifting only their green pixels (`tools/recolor-art.py`), drift at the page edges. Empty and error screens use a plain icon in a soft ring. |
+| **Looks** | Dark by default, with a light-mode switch in Settings, and three colors: lime, sunset, dusk. All of it is CSS tokens on `<html data-mode data-theme>` (`src/styles/metro.css`). |
+| **Logo and 3D art** | The logo follows the color: lime is the original; sunset is an exact hue shift of it; dusk is a white version made with Higgsfield, lettering unchanged. Glossy 3D holds, generated with Higgsfield and recolored per theme by shifting only their green pixels (`tools/recolor-art.py`), drift at the page edges. Empty and error screens use a plain icon in a soft ring. |
 | **Motion** | Buttons press fast and spring back, with a ripple where your finger lands and a band of light across the big ones. The background breathes: two drifting pools of light, rising glossy bubbles, twinkling stars, a sonar pulse on the rings. Only transform and opacity move, and "reduce motion" turns it all off (`src/styles/motion.css`, `src/lib/fx.ts`). |
 | **Onboarding** | Four steps, each one screen with no scrolling: top bar (back, "2 of 4", Skip), content, pinned action bar. Film one attempt, how it is read, your name / grade / route color, done. |
 | **Feed** | Shared climbs, full screen, one per swipe: autoplay muted, overlays on or off, props, save, a breakdown sheet, and **for you** / **saved**. |

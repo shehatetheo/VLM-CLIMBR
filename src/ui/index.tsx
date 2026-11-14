@@ -99,11 +99,11 @@ export function BladeTabBar({ active, go }: { active: TabId | null; go: (href: s
 }
 
 /** The wordmark, in the slime of the current color: lime is the original as
- *  supplied, sunset and midnight are exact hue shifts of it (same gloss, same
- *  lettering). A new color crossfades in. */
+ *  supplied, sunset is an exact hue shift of it, and dusk is a white version
+ *  (made with Higgsfield, lettering unchanged). A new color crossfades in. */
 export function Logo({ height = 32, className = '' }: { height?: number; className?: string }) {
   const { theme } = useLook()
-  const base = theme === 'sunset' || theme === 'midnight' ? `/brand/logo-${theme}` : '/brand/logo'
+  const base = theme === 'sunset' || theme === 'dusk' ? `/brand/logo-${theme}` : '/brand/logo'
   const w = Math.round(height * 1.79)
   return (
     <span className={`logo-wrap ${className}`} style={{ width: w, height }}>

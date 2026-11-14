@@ -12,7 +12,7 @@ import { GlossButton, Logo, SectionHeader } from '../ui'
 const THEMES: { id: Theme; name: string; sub: string; swatch: string }[] = [
   { id: 'lime', name: 'lime', sub: 'the classic', swatch: 'linear-gradient(180deg, #a6e86c, #4fa62a)' },
   { id: 'sunset', name: 'sunset', sub: 'orange glow', swatch: 'linear-gradient(180deg, #ffb347, #f07a00)' },
-  { id: 'midnight', name: 'midnight', sub: 'navy and silver', swatch: 'linear-gradient(180deg, #2f4a7d, #0b1730)' },
+  { id: 'dusk', name: 'dusk', sub: 'violet and white', swatch: 'linear-gradient(180deg, #7b6cc4, #241d4d)' },
 ]
 
 export function SettingsView({ health, onHealth, go }: { health: Health | null; onHealth: (h: Health) => void; go: (h: string) => void }) {
@@ -85,7 +85,7 @@ export function SettingsView({ health, onHealth, go }: { health: Health | null; 
             <button className="row" onClick={() => go('#/welcome')}><span className="grow"><b>replay the intro</b><span>how to film and what you get</span></span></button>
           </div>
           <p className="fine">No location is stored or shown. Videos you save are private unless you share them to the feed.</p>
-          <p className="fine">Example footage: jeremyipark/vision-demos (Apache-2.0). Floating 3D holds made with Higgsfield. Typeface: Selawik (SIL OFL).</p>
+          <p className="fine">Example climbs: Oliver, and jeremyipark/vision-demos (Apache-2.0). The dusk logo and floating 3D holds made with Higgsfield. Typeface: Selawik (SIL OFL).</p>
         </div>
       </div>
     </section>

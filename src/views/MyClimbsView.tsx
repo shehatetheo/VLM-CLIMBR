@@ -17,7 +17,7 @@ const tileOf = (s: Session, extra: Partial<Tile>): Tile => ({
 })
 
 /** Your climbs as a grid of glossy tiles, newest first. */
-export function MyClimbsView({ example, go }: { example: Session | null; go: (h: string) => void }) {
+export function MyClimbsView({ examples, go }: { examples: Session[]; go: (h: string) => void }) {
   const [tiles, setTiles] = useState<Tile[] | null>(null)
   const [menu, setMenu] = useState<Tile | null>(null)
 
@@ -83,19 +83,20 @@ export function MyClimbsView({ example, go }: { example: Session | null; go: (h:
           </div>
         )}
 
-        {example && (
+        {examples.length > 0 && (
           <>
-            <SectionHeader title="example" sub="a real climb, already analyzed, to show you how it works." />
+            <SectionHeader title="examples" sub="real climbs, already analyzed, to show you how it works." />
             <div className="rows">
-              <button className="row" onClick={() => go(`#/session/${example.id}/results`)}>
-                {example.video?.poster && <img className="row-thumb" src={example.video.poster} alt="" />}
-                <span className="grow"><b>{example.title}</b><span>{example.route.color} {example.route.grade} · {secs(example.elapsed)}</span></span>
-                <StickerBadge kind="example" />
-              </button>
+              {examples.map((ex) => (
+                <button key={ex.id} className="row" onClick={() => go(`#/session/${ex.id}/results`)}>
+                  {ex.video?.poster && <img className="row-thumb" src={ex.video.poster} alt="" />}
+                  <span className="grow"><b>{ex.title}</b><span>{ex.climber ? `${ex.climber} · ` : ''}{ex.route.color}{ex.route.grade ? ` ${ex.route.grade}` : ''}{ex.elapsed ? ` · ${secs(ex.elapsed)}` : ''}</span></span>
+                  <StickerBadge kind="example" />
+                </button>
+              ))}
             </div>
           </>
-        )}
-      </div>
+        )}      </div>
 
       <AnimatePresence>
         {menu && (

@@ -218,3 +218,25 @@ export async function loadExample(id = 'green-vb'): Promise<Session> {
   s.exampleId = id
   return s
 }
+
+/** An example recorded and analyzed with the app itself: the finished session
+ *  as the app stores it (session.json), beside its clean H.264 clip, poster and
+ *  wall photo. The overlay is drawn live, so it can be switched off. */
+export async function loadBundled(id: string): Promise<Session | null> {
+  const base = `${import.meta.env.BASE_URL}examples/${id}/`
+  try {
+    const r = await fetch(base + 'session.json')
+    if (!r.ok) return null
+    const s = (await r.json()) as Session
+    return {
+      ...s,
+      id: `example-${id}`,
+      kind: 'example',
+      coach: s.coach ?? undefined,
+      video: s.video ? { ...s.video, src: base + 'climb.mp4', poster: base + 'poster.jpg' } : undefined,
+      wall: s.wall ? { ...s.wall, src: base + 'wall.jpg' } : undefined,
+    }
+  } catch {
+    return null
+  }
+}

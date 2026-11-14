@@ -224,7 +224,7 @@ function drawHeader(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number
   ctx.fillText(ellipsis(ctx, s.title, box.w * 0.5), tx, box.y + box.h * 0.46)
   ctx.fillStyle = 'rgba(255,255,255,0.6)'
   ctx.font = `600 ${20 * u}px ${FONT}`
-  ctx.fillText(ellipsis(ctx, `${s.climber} · ${s.route.color} ${s.route.grade} · SAM 3.1 + ViTPose+`, box.w * 0.55), tx, box.y + box.h * 0.86)
+  ctx.fillText(ellipsis(ctx, `${s.climber} · ${s.route.color}${s.route.grade ? ` ${s.route.grade}` : ''} · SAM 3.1 + ViTPose+`, box.w * 0.55), tx, box.y + box.h * 0.86)
 
   const done = s.toppedOut && t >= tl.climbEnd
   const clock = Math.max(0, Math.min(t, tl.climbEnd))

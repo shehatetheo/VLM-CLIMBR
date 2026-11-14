@@ -15,7 +15,7 @@ interface Entry { key: string; climb: CloudClimb | null; session: Session | null
 
 /** One climb per screen, like a reel: swipe up for the next. Plays muted while
  *  it is on screen, with the analysis drawn live on top. */
-export function FeedView({ example, go }: { example: Session | null; go: (h: string) => void }) {
+export function FeedView({ examples, go }: { examples: Session[]; go: (h: string) => void }) {
   const [tab, setTab] = useState<'foryou' | 'saved'>('foryou')
   const [entries, setEntries] = useState<Entry[]>([])
   const [next, setNext] = useState<string | null>(null)
@@ -39,12 +39,12 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
   }, [tab])
   useEffect(() => { setState('loading'); setActive(0); load(null) }, [load])
 
-  // The bundled example leads "for you" until the database has its own seeded examples.
+  // The examples lead "for you" until the database has its own seeded ones.
   const list = useMemo(() => {
     const hasSeeded = entries.some((e) => e.climb?.is_example)
-    const lead = tab === 'foryou' && example && !hasSeeded ? [{ key: 'example', climb: null, session: example }] : []
+    const lead = tab === 'foryou' && !hasSeeded ? examples.map((e) => ({ key: e.id, climb: null, session: e })) : []
     return [...lead, ...entries]
-  }, [entries, example, tab])
+  }, [entries, examples, tab])
   useEffect(() => { if (next && active >= list.length - 2) load(next) }, [active, list.length, next, load])
 
   const patch = (key: string, p: Partial<Entry>) => setEntries((xs) => xs.map((e) => (e.key === key ? { ...e, ...p } : e)))
@@ -131,14 +131,14 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
   const poster = s?.video?.poster || climb?.thumbUrl || undefined
   const offset = s?.video?.offset ?? 0
   const routeColor = s?.route.color ?? climb?.route_color ?? 'green'
-  // Overlays drawn into the video itself (the bundled example) cannot be switched off.
-  const baked = s?.video?.overlays === 'burned-in' || Boolean(climb?.is_example)
+  // Overlays drawn into the video itself (the original demo clip) cannot be switched off.
+  const baked = s?.video?.overlays === 'burned-in'
   const total = score?.total ?? climb?.coach_score ?? 0
   const isExample = climb ? climb.is_example : true
   const openId = climb ? `c-${climb.id}` : s?.id
 
   const act = async (kind: 'props' | 'save') => {
-    if (!climb) { toast('That is the built-in example. Props and saves work on shared climbs.'); return }
+    if (!climb) { toast('That is a built-in example. Props and saves work on shared climbs.'); return }
     const on = kind === 'props' ? !climb.propped : !climb.saved
     const count = Math.max(0, (Number(climb.props) || 0) + (on ? 1 : -1))
     onClimb({ ...climb, ...(kind === 'props' ? { propped: on, props: count ? String(count) : null } : { saved: on }) })
@@ -173,7 +173,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
         <div className="feed-who">
           <ScoreBadge value={total} size={64} animate={false} />
           <div>
-            <b>{climb?.username ?? 'CLIMBR'}</b>
+            <b>{climb?.username ?? s?.climber ?? 'CLIMBR'}</b>
             <span>{climb?.title ?? s?.title ?? ''}</span>
           </div>
         </div>

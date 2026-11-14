@@ -84,7 +84,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
         <div className="sh-title">
           <h1>{s.title}</h1>
           <div className="sh-meta">
-            <span className="gpill"><i style={{ background: route }} />{s.route.color} · {s.route.grade}</span>
+            <span className="gpill"><i style={{ background: route }} />{s.route.color}{s.route.grade ? ` · ${s.route.grade}` : ''}</span>
             {s.kind === 'example' && <span className="sticker example">example</span>}
           </div>
         </div>

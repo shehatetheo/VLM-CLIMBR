@@ -52,7 +52,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
         <Backdrop scene="rings" />
         <RingBurst className="splash-rings" rings={6} />
         {/* the wordmark sprays in: a quick scale and fade, then a few drips */}
-        <motion.div className="splash-logo reflect" initial={{ scale: 0.72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 18 }}>
+        <motion.div className="splash-logo" initial={{ scale: 0.72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 18 }}>
           <Logo height={132} />
         </motion.div>
         <p className="splash-tag">feedback after every climb.</p>
@@ -122,7 +122,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
 
             {step === 4 && (
               <div className="ob-copy center">
-                <div className="reflect"><Logo height={96} /></div>
+                <Logo height={96} />
                 <h1>You’re set.</h1>
                 <p>After each climb you get a Coach Score and the exact moments to fix.</p>
               </div>

@@ -5,7 +5,7 @@ export type ClimbStatus = 'sent' | 'unfinished' | 'unclear'
 export type Visibility = 'private' | 'public'
 export type ReportReason = 'not_climbing' | 'inappropriate' | 'other'
 
-export interface ProfileRow { id: string; username: string; theme: 'lime' | 'sunset' | 'midnight'; created_at: string }
+export interface ProfileRow { id: string; username: string; theme: 'lime' | 'sunset' | 'dusk'; created_at: string }
 export interface ClimbRow {
   id: string
   user_id: string
