@@ -303,6 +303,9 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
             const vx = fx + 46 * px * Math.sign(fx - farX || 1)
             const y2 = floorY - (floorY - topY) * ease
             const hx = farX + (vx - farX) * ease
+            // What the panel really shows: the view box, plus the side room a wider panel leaves.
+            const half = Math.max(view.w, (size.width || 0) * px) / 2 - 6 * px
+            const span: [number, number] = [view.x0 + view.w / 2 - half, view.x0 + view.w / 2 + half]
             return (
               <g className="measure">
                 <line x1={vx} y1={floorY} x2={vx} y2={y2} stroke="#E6E1D9" strokeWidth={2 * px} strokeDasharray={`${7 * px} ${5 * px}`} />
@@ -313,15 +316,15 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
                 <g opacity={clamp((measure - 0.5) * 2)}>
                   {/* Labels sit outside the dimension line, away from the climb. */}
                   {vx < fx
-                    ? <MeterTag x={vx - 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent right />
-                    : <MeterTag x={vx + 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent />}
-                  <MeterTag x={(farX + vx) / 2} y={floorY + 22 * px} px={px} text={`${meters.across.toFixed(2)} m across`} center />
+                    ? <MeterTag span={span} x={vx - 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent right />
+                    : <MeterTag span={span} x={vx + 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent />}
+                  <MeterTag span={span} x={(farX + vx) / 2} y={floorY + 22 * px} px={px} text={`${meters.across.toFixed(2)} m across`} center />
                   {torsoMeters > 0 && torsoPts.length > 4 && (() => {
                     const mid = torsoPts[Math.floor(torsoPts.length * 0.42)]
                     const [mx, my] = X([mid[1], mid[2]])
                     return vx < fx
-                      ? <MeterTag x={mx + 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} />
-                      : <MeterTag x={mx - 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} right />
+                      ? <MeterTag span={span} x={mx + 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} />
+                      : <MeterTag span={span} x={mx - 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} right />
                   })()}
                 </g>
               </g>
@@ -346,10 +349,11 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
   )
 }
 
-function MeterTag({ x, y, px, text, accent, center, right }: { x: number; y: number; px: number; text: string; accent?: boolean; center?: boolean; right?: boolean }) {
+function MeterTag({ x, y, px, text, accent, center, right, span }: { x: number; y: number; px: number; text: string; accent?: boolean; center?: boolean; right?: boolean; span?: [number, number] }) {
   const fs = 13 * px
   const w = text.length * fs * 0.56 + 14 * px
-  const left = center ? x - w / 2 : right ? x - w : x
+  let left = center ? x - w / 2 : right ? x - w : x
+  if (span) left = Math.max(span[0], Math.min(left, span[1] - w)) // a narrow panel must not cut a label off
   return (
     <g>
       <rect x={left} y={y - fs * 0.95} width={w} height={fs * 1.6} rx={4 * px} fill="rgba(10,11,13,0.82)" stroke="rgba(255,255,255,0.12)" strokeWidth={px} />

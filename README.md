@@ -48,7 +48,7 @@ The functions bundle `ffmpeg-static`, so clips (including iPhone HDR `.mov`) are
 | **Replay** | The clip, the route map and the live stats on one clock that runs the length of the clip. On the video, the holds sit where the camera saw them and light up as they are used, and the climber's real ViTPose+ skeleton is drawn on top. On the route map, a climber figure is solved from the four contact points and the tracked torso. You get *on a hold* percentages, each limb's holds in order, and per-limb contact lanes on a scrubbable timeline. |
 | **Finale** | Shown after the top-out: the completion card comparing every attempt (gold = holds only that attempt used), then the route relights hold by hold in limb colours with order badges while the torso path grows. |
 | **Attempts** | Time-to-top bars, a beta matrix (the order each hold was reached, per attempt) and a route map of each attempt's line. |
-| **Coach** | A VLM reads the measurements plus 8 keyframes of the clip and writes a headline, scores, strengths, focus points (click one to jump the replay to that moment), drills, suggested beta and a next goal. On-device insights sit alongside. |
+| **Feedback** | What the app is for, and where a freshly read climb opens. A VLM reads the measurements plus 8 keyframes of the clip and writes a headline, scores, strengths, focus points (click one to jump the replay to that moment), drills, suggested beta and a next goal. On-device insights sit alongside. |
 | **Import** | Drop a phone video (`.mov`, `.mp4`, `.webm`; any orientation, iPhone HDR, up to 2 minutes) and it is analyzed live: uploading → reading the video → segmenting holds ‖ tracking the climber → reading the route → coach notes. Every stage reports what it measured; a stage that fails says why and offers Retry, and a clip with nothing to read (no holds of that colour, nobody climbing) says so instead of opening an empty replay. |
 | **Reel** | The whole performance in one picture: the clip with its hold masks and coloured-limb skeleton, the wall with the same skeleton and the torso path, and the numbers (per-limb *on a hold* %, sequences, contact lanes). When the clip ends, a finale relights the holds in limb colours with order badges and sums the climb up. Wide (1920×1080) for a desktop, Tall (1080×1920) for a phone. **Save video** records it in the browser (MP4 where the browser can record H.264, else WebM) and hands it to the share sheet or a download. |
 | **Export** | The performance reel, a PDF coach report, a 1080×1350 share card and a moves CSV. |
@@ -121,7 +121,7 @@ server/index.mjs   Express wrapper for local runs and `npm start` (plus /api/deb
 api/               the same core as Vercel functions (health, models, key, analyze, upload, cleanup, coach)
 src/lib/           route reader, camera motion, checks, session model, timeline + climber IK, overlay, reel compositor, coach, exports
 src/components/    route panel (SVG), video stage, timeline, live stats, reel player, key connection, export sheet, debug panel
-src/views/         onboarding, home, session (replay · reel · attempts · coach), import
+src/views/         onboarding, home, session (replay · reel · attempts · feedback), import
 attic/3d/          the parked 3D wall and LiDAR view
 public/examples/   the example climb: pipeline JSON, raw gateway JSON, clip, wall plate, coach feedback
 tools/             read-run.ts: the browser's route reader, run in Node on saved gateway output

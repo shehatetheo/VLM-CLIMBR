@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Brain, Bug, ChevronLeft, Clapperboard, Download, GitCompareArrows, Play } from 'lucide-react'
+import { AlertTriangle, Brain, Bug, ChevronLeft, ChevronRight, Clapperboard, Download, GitCompareArrows, Play } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { DebugPanel } from '../components/DebugPanel'
 import { ExportSheet } from '../components/ExportSheet'
@@ -9,6 +9,7 @@ import { RoutePanel } from '../components/RoutePanel'
 import { TimelineBar, type ViewOpts } from '../components/TimelineBar'
 import { VideoStage } from '../components/VideoStage'
 import type { Health } from '../lib/api'
+import { onDeviceFeedback } from '../lib/coach'
 import { sessionProblem } from '../lib/live'
 import { createPlayer, finaleSchedule, usePlayer } from '../lib/player'
 import { getPrefs, setPrefs } from '../lib/store'
@@ -22,10 +23,10 @@ const ALL_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'replay', label: 'Replay', icon: <Play size={14} /> },
   { id: 'reel', label: 'Reel', icon: <Clapperboard size={14} /> },
   { id: 'attempts', label: 'Attempts', icon: <GitCompareArrows size={14} /> },
-  { id: 'coach', label: 'Coach', icon: <Brain size={14} /> },
+  { id: 'coach', label: 'Feedback', icon: <Brain size={14} /> },
 ]
 
-export function SessionView({ session: s, health, onUpdate, go }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void }) {
+export function SessionView({ session: s, health, onUpdate, go, initialTab = 'replay' }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void; initialTab?: 'replay' | 'coach' }) {
   const tl = useMemo(() => buildTimeline(s), [s])
   const player = useMemo(() => {
     const climbEnd = tl.climbEnd
@@ -38,7 +39,9 @@ export function SessionView({ session: s, health, onUpdate, go }: { session: Ses
   useEffect(() => player.run(), [player])
   const ps = usePlayer(player)
 
-  const [tab, setTab] = useState<Tab>('replay')
+  const [tab, setTab] = useState<Tab>(initialTab)
+  // The point of the app: what to do differently next time. Always one tap away.
+  const read = useMemo(() => s.coach ?? onDeviceFeedback(s), [s])
   // Attempts compares several climbs of one route; a single clip has nothing to compare.
   const TABS = useMemo(() => ALL_TABS.filter((t) => (t.id !== 'attempts' || s.comparison?.attempts.length) && (t.id !== 'reel' || s.video?.src)), [s])
   useEffect(() => { if (tab !== 'replay') player.pause() }, [tab, player])
@@ -102,6 +105,13 @@ export function SessionView({ session: s, health, onUpdate, go }: { session: Ses
       <AnimatePresence mode="wait">
         {tab === 'replay' && (
           <motion.div key="replay" className="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            {!problem && (
+              <button className="coach-strip" onClick={() => setTab('coach')}>
+                <span className="cs-score">{read.score}</span>
+                <span className="cs-text"><em>{read.source === 'vlm' ? 'Coach' : 'On-device read'}</em><b>{read.headline}</b></span>
+                <span className="cs-go">Feedback <ChevronRight size={14} /></span>
+              </button>
+            )}
             <div className="stage">
               <VideoStage session={s} player={player} tl={tl} t={ps.t} showCard={showCard} onDismissCard={() => setCardDismissed(true)} />
               <div className="route-wrap card">

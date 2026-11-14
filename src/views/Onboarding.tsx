@@ -86,7 +86,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
             <div className="ob-center">
               <span className="kicker">Step 3 · Make it yours</span>
               <h1>What should we call you?</h1>
-              <input className="ob-input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" onKeyDown={(e) => e.key === 'Enter' && go(4)} />
+              <input className="ob-input" ref={(el) => { if (el && !el.dataset.f && window.matchMedia('(pointer: fine)').matches) { el.dataset.f = '1'; el.focus({ preventScroll: true }) } }} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" onKeyDown={(e) => e.key === 'Enter' && go(4)} />
               <div className="ob-field">
                 <span>Your usual grade</span>
                 <div className="grades big">{GRADES.map((g) => <button key={g} className={grade === g ? 'on' : ''} onClick={() => setGrade(g)}>{g}</button>)}</div>
@@ -117,7 +117,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
                   <Upload size={18} /> Import my climb
                 </motion.button>
               </div>
-              <p className="muted xs">Tip: <kbd>Space</kbd> plays the replay, <kbd>1</kbd>–<kbd>3</kbd> switch views, <kbd>E</kbd> exports.</p>
+              <p className="muted xs hide-m">Tip: <kbd>Space</kbd> plays the replay, <kbd>1</kbd>–<kbd>4</kbd> switch views, <kbd>E</kbd> exports.</p>
             </div>
           )}
         </motion.div>

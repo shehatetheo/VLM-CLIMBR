@@ -11,13 +11,16 @@ import { ImportView } from './views/ImportView'
 import { Onboarding } from './views/Onboarding'
 import { SessionView } from './views/SessionView'
 
-type Route = { name: 'home' } | { name: 'welcome' } | { name: 'import' } | { name: 'session'; id: string }
+type Route = { name: 'home' } | { name: 'welcome' } | { name: 'import' } | { name: 'session'; id: string; feedback?: boolean }
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, '')
   if (h.startsWith('welcome')) return { name: 'welcome' }
   if (h.startsWith('import')) return { name: 'import' }
-  if (h.startsWith('session/')) return { name: 'session', id: decodeURIComponent(h.slice(8)) }
+  if (h.startsWith('session/')) {
+    const [id, view] = h.slice(8).split('/')
+    return { name: 'session', id: decodeURIComponent(id), feedback: view === 'feedback' }
+  }
   return { name: 'home' }
 }
 
@@ -69,9 +72,9 @@ export default function App() {
             <main className="main">
               <AnimatePresence mode="wait">
                 {route.name === 'home' && <Home key="home" sessions={Object.values(sessions)} go={go} />}
-                {route.name === 'import' && <ImportView key="import" health={health} onHealth={setHealth} onSession={(s) => { addSession(s); go(`#/session/${encodeURIComponent(s.id)}`) }} />}
+                {route.name === 'import' && <ImportView key="import" health={health} onHealth={setHealth} onSession={(s) => { addSession(s); go(`#/session/${encodeURIComponent(s.id)}/feedback`) }} />}
                 {route.name === 'session' && (active ? (
-                  <SessionView key={active.id} session={active} health={health} onUpdate={addSession} go={go} />
+                  <SessionView key={active.id} session={active} health={health} onUpdate={addSession} go={go} initialTab={route.feedback ? 'coach' : 'replay'} />
                 ) : (
                   <motion.div key="loading" className="loading-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {error ? <p className="muted">{error}</p> : <div className="spinner" />}

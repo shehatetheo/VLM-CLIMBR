@@ -489,6 +489,23 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
       ctx.font = `600 ${14 * u * z}px ${FONT}`
       ctx.fillText(ellipsis(ctx, k, fw - 8 * u), c.x + i * fw, c.y + 82 * u * z)
     })
+    // What the coach made of it, where there is room under the numbers.
+    const coach = s.coach
+    if (coach?.headline && c.h > 190 * u * z) {
+      const top = c.y + 124 * u * z
+      kicker(ctx, `COACH · ${coach.score}/100`, c.x, top, u * z)
+      ctx.fillStyle = '#fff'
+      ctx.font = `700 ${22 * u * z}px ${FONT}`
+      const words = coach.headline.split(/\s+/)
+      const lines: string[] = ['']
+      for (const w of words) {
+        const next = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w
+        if (ctx.measureText(next).width <= c.w || !lines[lines.length - 1]) lines[lines.length - 1] = next
+        else lines.push(w)
+      }
+      const room = Math.max(1, Math.floor((c.y + c.h - top - 20 * u * z) / (28 * u * z)))
+      lines.slice(0, room).forEach((ln, i, all) => ctx.fillText(i === all.length - 1 && lines.length > room ? ellipsis(ctx, `${ln} …`, c.w) : ellipsis(ctx, ln, c.w), c.x, top + (30 + i * 28) * u * z))
+    }
     ctx.globalAlpha = 1
   } else {
     kicker(ctx, 'CONTACT', c.x, c.y + 14 * u * z, u * z)
