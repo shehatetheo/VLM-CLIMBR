@@ -6,14 +6,19 @@ import { useId, type CSSProperties } from 'react'
 
 type P = { className?: string; style?: CSSProperties }
 
-/** Concentric rings, like a speaker cone or a target. */
-export function RingBurst({ rings = 5, className, style }: P & { rings?: number }) {
+/** Concentric rings, like a speaker cone or a target. With `sonar`, a ring
+ *  keeps pulsing out of the middle. */
+export function RingBurst({ rings = 5, sonar, className, style }: P & { rings?: number; sonar?: boolean }) {
   return (
-    <svg viewBox="0 0 200 200" className={className} style={style} aria-hidden>
+    <svg viewBox="0 0 200 200" className={className} style={{ overflow: 'visible', ...style }} aria-hidden>
       {Array.from({ length: rings }, (_, i) => {
         const r = 96 - i * (92 / rings)
         return <circle key={i} cx="100" cy="100" r={r} fill={i % 2 ? 'var(--art-2, #fff)' : 'currentColor'} opacity={i % 2 ? 0.9 : 1} />
       })}
+      {sonar && <>
+        <circle className="sonar" cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="5" />
+        <circle className="sonar late" cx="100" cy="100" r="40" fill="none" stroke="currentColor" strokeWidth="5" />
+      </>}
     </svg>
   )
 }
@@ -43,7 +48,7 @@ export function StarField({ className, style, count = 5 }: P & { count?: number 
   const stars = [[30, 40, 22], [150, 30, 14], [170, 130, 20], [60, 150, 12], [105, 95, 9], [20, 110, 8]].slice(0, count)
   return (
     <svg viewBox="0 0 200 200" className={className} style={style} aria-hidden>
-      {stars.map(([x, y, r], i) => <path key={i} d={starPath(x, y, r)} fill="var(--art-2, #fff)" stroke="currentColor" strokeWidth={r * 0.22} strokeLinejoin="round" />)}
+      {stars.map(([x, y, r], i) => <path key={i} className="twinkle" style={{ animationDelay: `${-i * 1.7}s`, animationDuration: `${4 + (i % 3) * 1.3}s` }} d={starPath(x, y, r)} fill="var(--art-2, #fff)" stroke="currentColor" strokeWidth={r * 0.22} strokeLinejoin="round" />)}
     </svg>
   )
 }
@@ -53,7 +58,7 @@ export function Swoosh({ className, style }: P) {
   return (
     <svg viewBox="0 0 400 120" className={className} style={style} preserveAspectRatio="none" aria-hidden>
       <path d="M-10 90 C 80 10, 160 130, 250 50 S 380 20, 420 70" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
-      <path d="M-10 90 C 80 10, 160 130, 250 50 S 380 20, 420 70" fill="none" stroke="var(--art-2, #fff)" strokeWidth="3" strokeLinecap="round" strokeDasharray="2 12" />
+      <path className="march" d="M-10 90 C 80 10, 160 130, 250 50 S 380 20, 420 70" fill="none" stroke="var(--art-2, #fff)" strokeWidth="3" strokeLinecap="round" strokeDasharray="2 12" />
     </svg>
   )
 }
@@ -97,20 +102,41 @@ export function Scribble({ className, style }: P) {
   )
 }
 
+// Glossy bubbles rising through the page: [left %, size px, seconds, delay s, sway px].
+const BUBBLES: [number, number, number, number, number][] = [
+  [6, 26, 19, 0, 14], [18, 54, 29, 9, -22], [31, 16, 15, 4, 10], [44, 38, 25, 15, -16], [57, 22, 17, 2, 18],
+  [68, 64, 34, 20, -26], [79, 18, 16, 7, 12], [88, 42, 27, 12, -18], [95, 14, 14, 5, 8],
+]
+
+/** The living layer behind every tab: two slow pools of light and rising bubbles. */
+function Ambient() {
+  return (
+    <div className="ambient">
+      <i className="aurora a" /><i className="aurora b" />
+      {BUBBLES.map(([left, size, dur, delay, sway], i) => (
+        <span key={i} className="bubble-path" style={{ left: `${left}%`, animationDuration: `${dur}s`, animationDelay: `${-delay}s`, ['--sway' as string]: `${sway}px` }}>
+          <i className="bubble" style={{ width: size, height: size, animationDuration: `${dur / 3}s`, animationDelay: `${-delay / 2}s` }} />
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /** One background scene per screen. Decoration only: it sits behind every panel
  *  at low strength, and it never animates on a screen that plays video. */
 export function Backdrop({ scene = 'rings' }: { scene?: 'rings' | 'skyline' | 'chalk' | 'plain' }) {
   if (scene === 'plain') return <div className="backdrop grain" aria-hidden />
   return (
     <div className="backdrop grain" aria-hidden>
-      <Halftone style={{ width: '70vmin', top: '-12vmin', right: '-16vmin', opacity: 0.16 }} />
+      <Ambient />
+      <Halftone className="pan" style={{ width: '70vmin', top: '-12vmin', right: '-16vmin', opacity: 0.16 }} />
       {scene === 'rings' && <>
-        <RingBurst className="drift" style={{ width: '46vmin', top: '6%', left: '-14vmin', opacity: 0.2 }} />
+        <RingBurst sonar className="drift" style={{ width: '46vmin', top: '6%', left: '-14vmin', opacity: 0.2 }} />
         <RingBurst className="drift b" rings={4} style={{ width: '30vmin', bottom: '20%', right: '-8vmin', opacity: 0.18 }} />
         <StarField className="drift b" style={{ width: '54vmin', top: '30%', right: '-6vmin', opacity: 0.3 }} />
       </>}
       {scene === 'skyline' && <>
-        <RingBurst className="drift" style={{ width: '60vmin', top: '8%', right: '-18vmin', opacity: 0.18 }} />
+        <RingBurst sonar className="drift" style={{ width: '60vmin', top: '8%', right: '-18vmin', opacity: 0.18 }} />
         <StarField className="drift b" count={3} style={{ width: '40vmin', top: '10%', left: '-4vmin', opacity: 0.3 }} />
         <Skyline style={{ left: 0, right: 0, bottom: 0, width: '100%', height: '34%', opacity: 0.2 }} />
       </>}

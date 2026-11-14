@@ -97,7 +97,8 @@ export async function deleteSession(id: string) {
 
 const PREFS = 'climbr:prefs'
 export type Theme = 'lime' | 'sunset' | 'midnight'
-export interface Prefs { onboarded?: boolean; name?: string; grade?: string; color?: string; letters?: boolean; theme?: Theme; sounds?: boolean; username?: string }
+export type Mode = 'dark' | 'light'
+export interface Prefs { onboarded?: boolean; name?: string; grade?: string; color?: string; letters?: boolean; theme?: Theme; mode?: Mode; sounds?: boolean; username?: string }
 export function getPrefs(): Prefs {
   try { return JSON.parse(localStorage.getItem(PREFS) ?? '{}') } catch { return {} }
 }
@@ -105,9 +106,15 @@ export function setPrefs(p: Prefs) {
   try { localStorage.setItem(PREFS, JSON.stringify({ ...getPrefs(), ...p })) } catch { /* private mode */ }
 }
 
-const THEME_COLOR: Record<Theme, string> = { lime: '#8fd35a', sunset: '#f08a1c', midnight: '#12233f' }
-/** A theme is a token swap: one attribute on <html>, plus the browser chrome color. */
-export function applyTheme(theme: Theme = getPrefs().theme ?? 'lime') {
-  document.documentElement.dataset.theme = theme
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme])
+// The browser's own chrome (status bar, address bar) matches the top of the page.
+const THEME_COLOR: Record<Mode, Record<Theme, string>> = {
+  dark: { lime: '#14300d', sunset: '#3a1c06', midnight: '#1b3056' },
+  light: { lime: '#c4ec8f', sunset: '#ffc46b', midnight: '#cbdaf2' },
+}
+/** A look is two attributes on <html>: the mode (dark by default) and the color. */
+export function applyTheme(theme: Theme = getPrefs().theme ?? 'lime', mode: Mode = getPrefs().mode ?? 'dark') {
+  const el = document.documentElement
+  el.dataset.theme = theme
+  el.dataset.mode = mode
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[mode][theme])
 }

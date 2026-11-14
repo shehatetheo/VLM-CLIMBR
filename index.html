@@ -1,13 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="dark" data-theme="lime">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#8fd35a" />
+    <meta name="theme-color" content="#14300d" />
+    <!-- The saved look, before the first paint, so a light-mode user never sees a dark flash. -->
+    <script>try { var p = JSON.parse(localStorage.getItem('climbr:prefs') || '{}'); if (p.mode) document.documentElement.dataset.mode = p.mode; if (p.theme) document.documentElement.dataset.theme = p.theme } catch (e) {}</script>
     <meta name="description" content="CLIMBR: film one bouldering attempt and get a Coach Score and the exact moments to fix." />
     <meta property="og:title" content="CLIMBR" />
     <meta property="og:description" content="Film one attempt. Get a Coach Score and the exact moments to fix." />
-    <meta property="og:image" content="/brand/og.jpg" />
+    <meta property="og:image" content="https://climbr-lime.vercel.app/brand/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <!-- Add to Home Screen on iPhone: opens full screen, like an app. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />

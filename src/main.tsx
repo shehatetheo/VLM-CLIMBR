@@ -5,10 +5,13 @@ import '@fontsource-variable/open-sans'
 import './styles/legacy.css'
 import './styles/metro.css'
 import './styles/screens.css'
+import './styles/motion.css'
 import App from './App'
+import { installRipples } from './lib/fx'
 import { applyTheme } from './lib/store'
 
 applyTheme()
+installRipples()
 // Development only: log anything that runs off the side of the screen.
 if (import.meta.env.DEV) import('./lib/devOverflow').then((m) => m.watchOverflow())
 

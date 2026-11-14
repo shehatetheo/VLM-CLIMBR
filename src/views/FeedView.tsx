@@ -150,7 +150,8 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
   const act = async (kind: 'props' | 'save') => {
     if (!climb) { toast('That is the built-in example. Props and saves work on shared climbs.'); return }
     const on = kind === 'props' ? !climb.propped : !climb.saved
-    onClimb({ ...climb, ...(kind === 'props' ? { propped: on } : { saved: on }) })
+    const count = Math.max(0, (Number(climb.props) || 0) + (on ? 1 : -1))
+    onClimb({ ...climb, ...(kind === 'props' ? { propped: on, props: count ? String(count) : null } : { saved: on }) })
     if (on) pop()
     try { await (kind === 'props' ? toggleProps(climb.id, on) : toggleSave(climb.id, on)) } catch (e) {
       onClimb(climb)
@@ -196,7 +197,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
       </div>
 
       <div className="feed-rail">
-        <button className={climb?.propped ? 'on' : ''} onClick={() => act('props')} aria-pressed={Boolean(climb?.propped)} aria-label="Give props"><HandMetal size={24} /><span>{climb?.mine && climb.props ? climb.props : 'props'}</span></button>
+        <button className={climb?.propped ? 'on' : ''} onClick={() => act('props')} aria-pressed={Boolean(climb?.propped)} aria-label="Give props"><HandMetal size={24} /><span>{climb?.props ?? 'props'}</span></button>
         <button className={climb?.saved ? 'on' : ''} onClick={() => act('save')} aria-pressed={Boolean(climb?.saved)} aria-label="Save this climb"><Bookmark size={24} fill={climb?.saved ? 'currentColor' : 'none'} /><span>save</span></button>
         <button onClick={() => setOverlays((x) => !x)} aria-pressed={overlays} aria-label={overlays ? 'Hide the overlays' : 'Show the overlays'}>{overlays ? <Eye size={24} /> : <EyeOff size={24} />}<span>overlay</span></button>
         {climb && !climb.mine && <button onClick={() => setReporting(true)} aria-label="Report this climb"><Flag size={22} /><span>report</span></button>}

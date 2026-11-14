@@ -1,12 +1,14 @@
 -- CLIMBR · saved climbs, the community feed, and moderation.
 -- Written for a Supabase project of its own (it creates public.profiles).
 --
--- Safety rules this file enforces in the database, not in the app:
---   · a climb is private until its owner shares it, and a shared climb is shown
---     to nobody else until a moderator approves it (is_approved);
+-- Rules this file enforces in the database, not in the app:
+--   · a climb is private until its owner shares it;
+--   · shared climbs go straight into the feed while private.settings has
+--     auto_approve = 'true' (the default, for a group of friends). Set it to
+--     'false' and every shared climb waits for a moderator instead:
+--       update private.settings set value = 'false' where key = 'auto_approve';
 --   · users can only ever change their own rows, and of a climb only its
 --     visibility and title: scores, analysis and approval are not theirs to edit;
---   · other people's props counts come back as a soft range, never a number;
 --   · three reports hide a climb until it is reviewed;
 --   · no location is stored anywhere: there is no column for it.
 
@@ -72,7 +74,7 @@ create index reports_climb_idx on public.reports (climb_id);
 -- Settings no API role can read: limits, and the hash of the moderation secret.
 create schema if not exists private;
 create table private.settings (key text primary key, value text not null);
-insert into private.settings (key, value) values ('uploads_per_day', '20'), ('reports_to_hide', '3');
+insert into private.settings (key, value) values ('uploads_per_day', '20'), ('reports_to_hide', '3'), ('auto_approve', 'true');
 revoke all on schema private from anon, authenticated;
 
 -- ── helpers ──────────────────────────────────────────────────────────────────
@@ -88,9 +90,9 @@ $$ select current_user in ('authenticated', 'anon') $$;
 create function private.under_daily_limit(p_user uuid) returns boolean language sql stable security definer set search_path = '' as
 $$ select (select count(*) from public.climbs c where c.user_id = p_user and c.created_at > now() - interval '1 day') < (select value::int from private.settings where key = 'uploads_per_day') $$;
 
--- Other people's props are a soft range, so nobody chases a number.
-create function public.props_band(n integer) returns text language sql immutable set search_path = '' as
-$$ select case when n <= 0 then null when n < 5 then 'a few' when n < 10 then '5+' when n < 25 then '10+' when n < 50 then '25+' when n < 100 then '50+' else '100+' end $$;
+-- Whether shared climbs skip the moderation queue, answered yes or no.
+create function private.auto_approve() returns boolean language sql stable security definer set search_path = '' as
+$$ select coalesce((select value = 'true' from private.settings where key = 'auto_approve'), false) $$;
 
 -- ── guards ───────────────────────────────────────────────────────────────────
 -- A user decides only whether their climb is private or public, and its title.
@@ -98,7 +100,7 @@ create function private.climbs_guard() returns trigger language plpgsql set sear
 begin
   if not private.is_api_user() then return new; end if;
   if tg_op = 'INSERT' then
-    new.is_approved := false; new.is_example := false; new.hidden_at := null; new.reviewed_at := null; new.created_at := now();
+    new.is_approved := private.auto_approve(); new.is_example := false; new.hidden_at := null; new.reviewed_at := null; new.created_at := now();
     if not private.under_daily_limit(new.user_id) then
       raise exception 'daily_limit' using hint = 'Too many climbs saved today.';
     end if;
@@ -108,8 +110,8 @@ begin
   new.duration := old.duration; new.route_color := old.route_color; new.hold_count := old.hold_count; new.status := old.status;
   new.coach_score := old.coach_score; new.sub_scores := old.sub_scores; new.analysis := old.analysis; new.highlight := old.highlight;
   new.is_approved := old.is_approved; new.is_example := old.is_example; new.hidden_at := old.hidden_at; new.reviewed_at := old.reviewed_at; new.created_at := old.created_at;
-  -- A renamed climb has to be looked at again before it is public.
-  if new.title is distinct from old.title then new.is_approved := false; new.reviewed_at := null; end if;
+  -- With moderation on, a renamed climb has to be looked at again before it is public.
+  if new.title is distinct from old.title and not private.auto_approve() then new.is_approved := false; new.reviewed_at := null; end if;
   return new;
 end $$;
 create trigger climbs_guard before insert or update on public.climbs for each row execute function private.climbs_guard();
@@ -157,8 +159,7 @@ create function private.card(c public.climbs) returns public.climb_card language
     c.user_id = (select auth.uid()),
     exists (select 1 from public.props x where x.climb_id = c.id and x.user_id = (select auth.uid())),
     exists (select 1 from public.saves x where x.climb_id = c.id and x.user_id = (select auth.uid())),
-    case when c.user_id = (select auth.uid()) then (select count(*)::text from public.props x where x.climb_id = c.id)
-         else public.props_band((select count(*)::int from public.props x where x.climb_id = c.id)) end
+    nullif((select count(*) from public.props x where x.climb_id = c.id), 0)::text
   from public.profiles p where p.id = c.user_id
 $$;
 
@@ -251,10 +252,10 @@ end $$;
 --   update public.climbs set is_approved = false, visibility = 'private', reviewed_at = now() where id = '<climb id>'; -- reject
 
 revoke execute on all functions in schema private from public, anon, authenticated;
--- The guard trigger runs as the caller, so it needs these two; neither reveals a setting.
+-- The guard trigger runs as the caller, so it needs these three; none reveals a setting.
 -- (The private schema is not exposed through the API, so nothing in it can be called from outside.)
 grant usage on schema private to anon, authenticated;
-grant execute on function private.is_api_user(), private.under_daily_limit(uuid) to anon, authenticated;
+grant execute on function private.is_api_user(), private.under_daily_limit(uuid), private.auto_approve() to anon, authenticated;
 grant execute on function public.feed(timestamptz, integer, text), public.get_climb(uuid) to anon, authenticated;
 grant execute on function public.saved_feed(timestamptz, integer), public.my_climbs(), public.report_climb(uuid, text) to authenticated;
 grant execute on function public.admin_pending(text), public.admin_review(text, uuid, boolean), public.admin_mark_example(text, uuid), public.admin_clear_examples(text) to anon, authenticated;
@@ -263,13 +264,13 @@ grant execute on function public.admin_pending(text), public.admin_review(text, 
 -- Private buckets, served with signed URLs. Objects live under the owner's id:
 --   climb-videos/<user id>/<climb id>.mp4      climb-thumbnails/<user id>/<climb id>.jpg
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
-  ('climb-videos', 'climb-videos', false, 104857600, array['video/mp4', 'video/webm']),
+  ('climb-videos', 'climb-videos', false, 52428800, array['video/mp4', 'video/webm']),
   ('climb-thumbnails', 'climb-thumbnails', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
 
 -- A file can be signed by its owner, or by anyone once its climb has been
--- shared. A shared-but-unapproved file is reachable only by its unguessable
--- path, which only the owner and the moderation queue ever learn.
+-- shared. With moderation on, a shared-but-unapproved file is reachable only by
+-- its unguessable path, which only the owner and the moderation queue learn.
 create function public.climb_object_visible(p_name text) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.climbs c where (c.video_path = p_name or c.thumbnail_path = p_name) and c.visibility = 'public')
 $$;

@@ -101,7 +101,7 @@ export function ResultsView({ session: s, tl, health, onUpdate, onPick, onSeek, 
         <div className="ai-head">
           <span className="eyebrow"><Sparkles size={13} /> ai coach notes</span>
           <button className="btn sm" disabled={!canVlm || busy} onClick={generate}>
-            {busy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}{busy ? 'Reading your clip…' : ai ? 'Regenerate' : 'Ask the AI coach'}
+            {busy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}{busy ? 'Reading your clip…' : ai ? 'New notes' : 'Ask the AI coach'}
           </button>
         </div>
         {ai ? (
@@ -119,10 +119,10 @@ export function ResultsView({ session: s, tl, health, onUpdate, onPick, onSeek, 
               {ai.beta && <div className="ai-item"><b>Sequence to try</b><span>{ai.beta}</span></div>}
               {ai.next_goal && <div className="ai-item"><b>Next goal</b><span>{ai.next_goal}</span></div>}
             </details>
-            <p className="fine">Written by {ai.model ?? 'a vision model'}{ai.watchedVideo ? ` from ${ai.frames ?? 8} frames of your clip` : ''}. The score above does not depend on it.</p>
+            <p className="fine">Written by an AI coach{ai.watchedVideo ? ` from ${ai.frames ?? 8} frames of your clip` : ''}. The score above does not depend on it.</p>
           </>
         ) : (
-          <p>{canVlm ? 'A vision model can look at frames of your clip and add its own notes and drills.' : 'Connect a VLM Run key to add notes and drills from a vision model. The score and analysis above work without it.'}</p>
+          <p>{canVlm ? 'The AI coach can look at frames of your clip and add its own notes and drills.' : 'AI coach notes are not set up on this copy of CLIMBR. Your score and breakdown above work without them.'}</p>
         )}
       </section>
 

@@ -85,7 +85,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
     const onEvent = (e: StageEvent) => {
       if (e.stage !== 'uploading') stage('uploading', { status: 'done', progress: 1 })
       current = e.stage
-      stage(e.stage, { status: e.status, detail: e.detail ?? undefined, progress: e.progress })
+      stage(e.stage, { status: e.status, detail: e.detail?.replace(/^(SAM 3\.1|ViTPose\+)\s*·\s*/, '') ?? undefined, progress: e.progress })
     }
     try {
       const r = await analyzeLive(clip.file, { color, health }, onEvent, (p) => stage('uploading', { progress: p, detail: `${Math.round(p * 100)}% of ${fmtBytes(clip.size)}` }), ctl.signal)
@@ -116,15 +116,15 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       if (bad.length) throw Object.assign(new StageError(`The result failed ${bad.length} check${bad.length > 1 ? 's' : ''}, so it was not opened.`, 'analyzing_moves'), { checks: bad })
       const plate = await buildWallPlate(s)
       if (plate) s.wall = { src: plate, affine: [[1, 0, 0], [0, 1, 0]] }
-      stage('analyzing_moves', { status: 'done', detail: `${s.holds.length} holds · ${s.moves.length} moves · ${s.toppedOut ? `topped out in ${s.elapsed!.toFixed(2)} s` : 'no top-out'} · camera ${reading.stats.camera}` })
+      stage('analyzing_moves', { status: 'done', detail: `${s.holds.length} holds · ${s.moves.length} moves · ${s.toppedOut ? `topped out in ${s.elapsed!.toFixed(2)}s` : 'no top-out'}` })
 
       // ── coaching: optional. A coach that cannot answer does not sink the run. ──
       current = 'coaching'
-      stage('coaching', { status: 'running', detail: 'A vision model looks at 8 frames of your clip' })
+      stage('coaching', { status: 'running', detail: 'The AI coach looks at 8 frames of your clip' })
       try {
         const fb = await requestVlmCoach(s, ctl.signal)
         s.coach = fb
-        stage('coaching', { status: 'done', detail: `${fb.model ?? 'VLM'} · “${fb.headline}”` })
+        stage('coaching', { status: 'done', detail: `“${fb.headline}”` })
       } catch (e) {
         if ((e as Error).name === 'AbortError') throw e
         stage('coaching', { status: 'skipped', detail: `Skipped: ${(e as Error).message}. You can ask again from Results.` })
@@ -212,8 +212,8 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
 const STAGES: { key: StageKey; label: string; model?: string }[] = [
   { key: 'uploading', label: 'uploading your clip' },
   { key: 'extracting_frames', label: 'reading the video', model: '10 frames a second' },
-  { key: 'segmenting', label: 'finding holds…', model: 'SAM 3.1' },
-  { key: 'estimating_pose', label: 'tracking your moves…', model: 'ViTPose+' },
+  { key: 'segmenting', label: 'finding holds…', model: 'every hold of your color' },
+  { key: 'estimating_pose', label: 'tracking your moves…', model: 'hands, feet and body' },
   { key: 'analyzing_moves', label: 'reading the route', model: 'on this device' },
   { key: 'coaching', label: 'writing your breakdown…', model: 'AI coach notes · optional' },
 ]

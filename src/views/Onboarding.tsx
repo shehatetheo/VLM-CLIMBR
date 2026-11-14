@@ -92,7 +92,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
                 <div className="ob-copy">
                   <h1>We read every move.</h1>
                   <p>CLIMBR finds your holds and follows your hands and feet to the top.</p>
-                  <Bullets items={['SAM 3.1 outlines every hold of your color', 'ViTPose+ tracks your body, frame by frame', 'A coach turns it into what to fix next']} />
+                  <Bullets items={['We outline every hold of your color', 'We track your hands and feet, frame by frame', 'Your coach turns it into what to fix next']} />
                 </div>
                 <ExampleClip label="Holds and body, tracked" play />
               </>

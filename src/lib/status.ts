@@ -104,7 +104,7 @@ export function climbStatus(s: Session): StatusRead {
   if (at && after && (after[1] - at[1]) / 0.6 > R.fallSpeed) ending = 'fell'
   if (before && at && Math.abs(at[0] - before[0]) > R.swing) cause = ` Your hips swung ${at[0] > before[0] ? 'right' : 'left'} just before, which pulls you off the wall: keep them close on that move.`
   const how = ending === 'fell' ? 'you came off the wall' : ending === 'cut-off' ? 'the video ended' : 'you let go or stepped off'
-  const where = reached ? `You made it to hold ${reached.rank} of ${reached.of}${reached.rank >= reached.of - 1 ? ', so close!' : '.'}` : 'You got on the wall.'
+  const where = reached ? `You made it to hold ${reached.rank} of ${reached.of}${reached.rank >= reached.of ? ', the top hold. Match it and hold on a second longer next time.' : reached.rank === reached.of - 1 ? ', one hold from the top.' : '.'}` : 'You got on the wall.'
   const limb = lastHand ? ` Your ${LIMB_BY_KEY[lastHand.limb].name} was the last to move.` : ''
   return { status: 'unfinished', title: 'so close', time: lastEnd, reached, ending, detail: `${where} At ${lastEnd.toFixed(1)}s ${how}.${ending === 'cut-off' ? '' : limb}${cause}` }
 }

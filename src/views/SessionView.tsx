@@ -14,6 +14,7 @@ import { coachInsights, coachScore, secs, verdict, type BestMove, type Insight }
 import { getPrefs, setPrefs } from '../lib/store'
 import { buildTimeline } from '../lib/timeline'
 import { LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session } from '../lib/types'
+import { PILL_SPRING } from '../ui'
 import { ResultsView } from './ResultsView'
 
 type Tab = 'results' | 'replay' | 'reel'
@@ -94,6 +95,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
         <div className="tabs" role="tablist">
           {TABS.map((t, i) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)} title={`${t.label} (${i + 1})`}>
+              {tab === t.id && <motion.i layoutId="tab-pill" className="tab-pill" transition={PILL_SPRING} />}
               <span className="tab-inner">{t.icon}{t.label}</span>
             </button>
           ))}

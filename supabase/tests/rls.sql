@@ -5,6 +5,8 @@
 create or replace function pg_temp.check_(label text, ok boolean) returns text language sql as $$ select case when ok then 'PASS  ' else 'FAIL  ' end || label $$;
 insert into auth.users (id) values ('00000000-0000-0000-0000-00000000000a'), ('00000000-0000-0000-0000-00000000000b'), ('00000000-0000-0000-0000-00000000000c'), ('00000000-0000-0000-0000-00000000000d');
 insert into private.settings (key, value) values ('admin_secret_hash', extensions.crypt('s3cret', extensions.gen_salt('bf')));
+-- Most checks run with moderation on, the strict mode; the default (auto-approve) is checked at the end.
+update private.settings set value = 'false' where key = 'auto_approve';
 
 -- A signs in, makes a profile and a climb, and tries to approve it herself.
 set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
@@ -38,7 +40,7 @@ select pg_temp.check_('after approval it is in the feed, with the username', cou
 select pg_temp.check_('B still could not edit or delete it', title = 'green slab') from public.climbs where id = '10000000-0000-0000-0000-000000000001';
 insert into public.props (user_id, climb_id) values (auth.uid(), '10000000-0000-0000-0000-000000000001');
 insert into public.saves (user_id, climb_id) values (auth.uid(), '10000000-0000-0000-0000-000000000001');
-select pg_temp.check_('B sees a soft range, not a count', props = 'a few' and propped and saved and not mine) from public.feed();
+select pg_temp.check_('B sees the props count and their own props and save', props = '1' and propped and saved and not mine) from public.feed();
 select pg_temp.check_('B finds it in saved_feed()', count(*) = 1) from public.saved_feed();
 select pg_temp.check_('get_climb() returns the analysis once approved', public.get_climb('10000000-0000-0000-0000-000000000001') -> 'analysis' = '{"holds":[]}');
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
@@ -78,3 +80,16 @@ do $$ begin insert into public.climbs (user_id, video_path, route_color, status,
 -- Examples.
 select public.admin_mark_example('s3cret', (select id from public.climbs where video_path = 'c/1'));
 select pg_temp.check_('a seeded example is public, approved and owned by CLIMBR', is_example and is_approved and username = 'CLIMBR') from public.feed() where is_example;
+
+-- The default for a group of friends: shared climbs go straight into the feed.
+reset role;
+update private.settings set value = 'true' where key = 'auto_approve';
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+insert into public.climbs (id, user_id, title, video_path, route_color, status, coach_score, analysis, is_approved, visibility)
+  values ('10000000-0000-0000-0000-0000000000d1', auth.uid(), 'quick share', '00000000-0000-0000-0000-00000000000d/x.mp4', 'blue', 'sent', 77, '{}', false, 'public');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.check_('with auto-approve on, a shared climb is in the feed right away', count(*) = 1) from public.feed() where id = '10000000-0000-0000-0000-0000000000d1';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
+update public.climbs set coach_score = 100 where id = '10000000-0000-0000-0000-0000000000d1';
+select pg_temp.check_('auto-approve still keeps the score out of the owner''s hands', coach_score = 77) from public.climbs where id = '10000000-0000-0000-0000-0000000000d1';
+reset role;

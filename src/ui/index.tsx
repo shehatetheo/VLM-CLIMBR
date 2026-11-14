@@ -1,5 +1,6 @@
 // The component kit. Each one is a thin wrapper over a material class in
 // styles/metro.css, so the look lives in one place.
+import { motion } from 'framer-motion'
 import { BarChart3, Compass, Settings, Upload } from 'lucide-react'
 import { useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react'
 import { Scribble } from './art'
@@ -76,14 +77,19 @@ export const TABS: { id: TabId; label: string; href: string; icon: ReactNode }[]
   { id: 'climbs', label: 'my climbs', href: '#/climbs', icon: <BarChart3 size={20} /> },
   { id: 'settings', label: 'settings', href: '#/settings', icon: <Settings size={20} /> },
 ]
-/** The bottom bar, after the dashboard "blades": chrome, lowercase, thumb zone. */
+/** The spring that carries a selected pill from one tab to the next. */
+export const PILL_SPRING = { type: 'spring', stiffness: 520, damping: 38, mass: 0.9 } as const
+
+/** The bottom bar, after the dashboard "blades": chrome, lowercase, thumb zone.
+ *  The glossy pill slides to the tab you pick, and its icon hops. */
 export function BladeTabBar({ active, go }: { active: TabId | null; go: (href: string) => void }) {
   return (
     <nav className="blades" aria-label="Main">
       <div className="blades-bar chrome">
         {TABS.map((t) => (
           <button key={t.id} className={`blade ${active === t.id ? 'on' : ''}`} aria-current={active === t.id ? 'page' : undefined} onClick={() => go(t.href)}>
-            {t.icon}<span>{t.label}</span>
+            {active === t.id && <motion.i layoutId="blade-pill" className="blade-pill" transition={PILL_SPRING} />}
+            <span className="blade-icon" key={active === t.id ? 'on' : 'off'}>{t.icon}</span><span>{t.label}</span>
             {active === t.id && <Scribble className="scribble" />}
           </button>
         ))}
