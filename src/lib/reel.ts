@@ -173,7 +173,28 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   // ── the numbers ──
   // Under a wide clip, the numbers grow into the clip's place as it fades.
   const statsRect = mix(L.stats, under ? { ...L.stats, y: L.body.y, h: L.body.h } : statsEnd, k)
-  drawStats(ctx, R, statsRect, u, t, inFinale ? f : -1, route, L.portrait)
+  const coached = drawStats(ctx, R, statsRect, u, t, inFinale ? f : -1, route, L.portrait)
+  // Where the numbers had no room for the coach's line, it captions the wall.
+  if (inFinale && !coached && s.coach?.headline) {
+    const a = clamp01((f - R.finale.summary) / 0.6)
+    if (a > 0) {
+      ctx.save()
+      ctx.globalAlpha = a
+      const h = 96 * u, y = mapRect.y + mapRect.h - h
+      roundClip(ctx, mapRect, 18 * u)
+      const shade = ctx.createLinearGradient(0, y - 40 * u, 0, y + h)
+      shade.addColorStop(0, 'rgba(5,6,7,0)')
+      shade.addColorStop(0.45, 'rgba(5,6,7,0.86)')
+      shade.addColorStop(1, 'rgba(5,6,7,0.94)')
+      ctx.fillStyle = shade
+      ctx.fillRect(mapRect.x, y - 40 * u, mapRect.w, h + 40 * u)
+      kicker(ctx, `COACH · ${s.coach.score}/100`, mapRect.x + 22 * u, y + 30 * u, u)
+      ctx.fillStyle = '#fff'
+      ctx.font = `720 ${27 * u}px ${FONT}`
+      ctx.fillText(ellipsis(ctx, s.coach.headline, mapRect.w - 44 * u), mapRect.x + 22 * u, y + 66 * u)
+      ctx.restore()
+    }
+  }
   ctx.restore()
 }
 
@@ -394,11 +415,13 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
   ctx.fillText(s.video?.motion ? 'wall rebuilt from the moving camera' : 'the wall, from the clip', panel.x + 20 * u, panel.y + (finale ? 68 : 56) * u)
 }
 
-function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number, t: number, f: number, route: string, portrait: boolean) {
+/** Draws the numbers; returns whether the coach's line found room among them. */
+function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number, t: number, f: number, route: string, portrait: boolean): boolean {
   const { s, tl } = R
   const finale = f >= 0
   const T = finale ? tl.climbEnd : Math.max(0, Math.min(t, tl.climbEnd))
   const wide = !portrait && box.w > box.h * 1.6 // a strip: lay the blocks side by side
+  let coached = false
   ctx.save()
   roundRect(ctx, box.x, box.y, box.w, box.h, 18 * u)
   ctx.fillStyle = 'rgba(255,255,255,0.035)'
@@ -492,6 +515,7 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
     // What the coach made of it, where there is room under the numbers.
     const coach = s.coach
     if (coach?.headline && c.h > 190 * u * z) {
+      coached = true
       const top = c.y + 124 * u * z
       kicker(ctx, `COACH · ${coach.score}/100`, c.x, top, u * z)
       ctx.fillStyle = '#fff'
@@ -532,6 +556,7 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
     ctx.fillRect(hx - u, c.y + 24 * u * z, 2 * u, 4 * (laneH + 5 * u) + 2 * u)
   }
   ctx.restore()
+  return coached
 }
 
 // ── small drawing helpers ───────────────────────────────────────────────────
