@@ -291,13 +291,13 @@ function runFfmpeg(args, { onProgress, duration, signal } = {}) {
  *  copy when CLIMBR_WEBM is set), then a poster from the playback copy. */
 export async function extractMedia(original, dir, src, { onProgress, signal } = {}) {
   const webm = Boolean(env('CLIMBR_WEBM', ''))
-  const pre = `${src.hdr ? TONEMAP : ''}format=yuv420p`
-  const playRate = src.fps > PLAYBACK_MAX_FPS + 0.5 ? `fps=${PLAYBACK_MAX_FPS},` : ''
+  // Cheapest first: a 4K 60 fps HDR clip is cut to 30 fps and 1280 px before
+  // the tone-mapping (which works in float) and before anything is encoded.
+  const rate = src.fps > PLAYBACK_MAX_FPS + 0.5 ? `fps=${PLAYBACK_MAX_FPS},` : ''
+  const pre = `${rate}${fitEdge(PLAYBACK_EDGE)},${src.hdr ? TONEMAP : ''}format=yuv420p,setsar=1`
   const branches = webm ? 3 : 2
   const graph = `[0:v]${pre},split=${branches}[a][p]${webm ? '[w]' : ''};` +
-    `[a]fps=${ANALYSIS_FPS},${fitEdge(ANALYSIS_EDGE)},setsar=1[ao];` +
-    `[p]${playRate}${fitEdge(PLAYBACK_EDGE)},setsar=1[po]` +
-    (webm ? `;[w]${playRate}${fitEdge(PLAYBACK_EDGE)},setsar=1[wo]` : '')
+    `[a]fps=${ANALYSIS_FPS},${fitEdge(ANALYSIS_EDGE)}[ao];[p]null[po]${webm ? ';[w]null[wo]' : ''}`
   const files = {
     analysis: path.join(dir, 'analysis.mp4'),
     playback: path.join(dir, 'play.mp4'),

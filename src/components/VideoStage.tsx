@@ -28,7 +28,7 @@ export function VideoStage({ session: s, player, tl, t, showCard, onDismissCard 
 
   return (
     <div className="video-stage">
-      <div className="video-frame" style={{ aspectRatio: `${aspect ?? 9 / 16}` }}>
+      <div className="video-frame" style={{ aspectRatio: `${aspect ?? 9 / 16}`, ['--ar' as string]: aspect ?? 9 / 16 }}>
         {v ? (
           <>
             <video ref={ref} poster={v.poster} muted playsInline preload="auto" className="video">

@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react'
 import { clamp, easeOut, invertAffine, pathLength, polygonPath, smoothPath } from '../lib/geometry'
 import { holdFill } from '../lib/colors'
 import { finaleSchedule } from '../lib/player'
+import { canvasSkeletonAt } from '../lib/skeleton'
 import type { Timeline } from '../lib/timeline'
 import { GOLD, LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session, type Vec2 } from '../lib/types'
 import { useSize } from '../lib/useSize'
@@ -133,7 +134,9 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
 
   // ── climber ──
   const showClimber = !inFinale
-  const sk = skeleton && showClimber ? tl.skeletonAt(Math.min(t, climbEnd)) : null
+  // A climb with a pose track shows the real figure; only the example, which
+  // has none, shows one solved from its contacts.
+  const sk = !skeleton ? null : s.pose ? (inFinale ? null : canvasSkeletonAt(s, t + (s.video?.offset ?? 0))) : showClimber ? tl.skeletonAt(Math.min(t, climbEnd)) : null
   const torso = tl.torsoAt(Math.min(Math.max(t, 0), climbEnd + 0.5)) ?? sk?.torso ?? null
   const trail = useMemo(() => {
     if (!torsoPts.length) return [] as Vec2[]

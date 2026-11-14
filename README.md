@@ -32,6 +32,12 @@ For production, run `npm run build && npm start`. That serves `dist/` and the AP
 
 Without Blob, everything else still works: the example, the VLM coach and exports. The Import page says what's missing.
 
+Once a run finishes, the browser keeps its own copy of the playback clip and poster (IndexedDB) and `api/cleanup` deletes them from Blob, so nothing of a climb stays on the server.
+
+### On an iPhone
+
+CLIMBR is laid out for a phone first. Open the deployed site in Safari, tap **Share → Add to Home Screen**, and it launches full screen like an app: bottom navigation, safe-area aware, clips picked straight from the camera roll. Climbs are stored on the phone itself.
+
 The functions bundle `ffmpeg-static`, so clips (including iPhone HDR `.mov`) are read on Vercel exactly as they are locally. `api/analyze` runs up to 300 s, the Hobby maximum; a 30 s climb takes 45–70 s. The coach cuts its 8 keyframes in the browser, so it needs no ffmpeg at all.
 
 ## What's in it
@@ -44,9 +50,10 @@ The functions bundle `ffmpeg-static`, so clips (including iPhone HDR `.mov`) are
 | **Attempts** | Time-to-top bars, a beta matrix (the order each hold was reached, per attempt) and a route map of each attempt's line. |
 | **Coach** | A VLM reads the measurements plus 8 keyframes of the clip and writes a headline, scores, strengths, focus points (click one to jump the replay to that moment), drills, suggested beta and a next goal. On-device insights sit alongside. |
 | **Import** | Drop a phone video (`.mov`, `.mp4`, `.webm`; any orientation, iPhone HDR, up to 2 minutes) and it is analyzed live: uploading → reading the video → segmenting holds ‖ tracking the climber → reading the route → coach notes. Every stage reports what it measured; a stage that fails says why and offers Retry, and a clip with nothing to read (no holds of that colour, nobody climbing) says so instead of opening an empty replay. |
-| **Export** | The **analysis video**, rendered in the browser only when you ask for it: the clip with every hold, the skeleton, the clock and the sequence burned in (MP4 where the browser can record it, else WebM). Also a PDF coach report, a 1080×1350 share card and a moves CSV. |
+| **Reel** | The whole performance in one picture: the clip with its hold masks and coloured-limb skeleton, the wall with the same skeleton and the torso path, and the numbers (per-limb *on a hold* %, sequences, contact lanes). When the clip ends, a finale relights the holds in limb colours with order badges and sums the climb up. Wide (1920×1080) for a desktop, Tall (1080×1920) for a phone. **Save video** records it in the browser (MP4 where the browser can record H.264, else WebM) and hands it to the share sheet or a download. |
+| **Export** | The performance reel, a PDF coach report, a 1080×1350 share card and a moves CSV. |
 
-Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> seek (hold <kbd>Shift</kbd> for 2 s) · <kbd>1</kbd>–<kbd>3</kbd> views · <kbd>E</kbd> export.
+Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> seek (hold <kbd>Shift</kbd> for 2 s) · <kbd>1</kbd>–<kbd>4</kbd> views · <kbd>E</kbd> export.
 
 The 3D wall and iPhone LiDAR are parked in `attic/3d/` until the video analysis is where we want it; its README says how to bring them back.
 
@@ -111,10 +118,10 @@ node .climbr/read-run.mjs raw public/examples/green-vb/gateway/sam3.1-track.json
 server/core.mjs    the API itself: VLM Run client, probe + frame extraction, SAM 3.1 + ViTPose+, coach, run folders
 server/vlm.mjs     the strict adapter for SAM 3.1 and ViTPose+ responses
 server/index.mjs   Express wrapper for local runs and `npm start` (plus /api/debug in development)
-api/               the same core as Vercel functions (health, models, key, analyze, upload, coach)
-src/lib/           route reader, camera motion, checks, session model, timeline + climber IK, overlay, coach, exports
-src/components/    route panel (SVG), video stage, timeline, live stats, key connection, export sheet, debug panel
-src/views/         onboarding, home, session (replay · attempts · coach), import
+api/               the same core as Vercel functions (health, models, key, analyze, upload, cleanup, coach)
+src/lib/           route reader, camera motion, checks, session model, timeline + climber IK, overlay, reel compositor, coach, exports
+src/components/    route panel (SVG), video stage, timeline, live stats, reel player, key connection, export sheet, debug panel
+src/views/         onboarding, home, session (replay · reel · attempts · coach), import
 attic/3d/          the parked 3D wall and LiDAR view
 public/examples/   the example climb: pipeline JSON, raw gateway JSON, clip, wall plate, coach feedback
 tools/             read-run.ts: the browser's route reader, run in Node on saved gateway output

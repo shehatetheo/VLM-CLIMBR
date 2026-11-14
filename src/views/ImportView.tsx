@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConnectKey } from '../components/ConnectKey'
 import { toast } from '../components/Toast'
 import { readRoute, type Reading } from '../lib/analyze'
-import { analyzeLive, reportRun, STAGE_KEYS, StageError, type Health, type StageEvent, type StageKey } from '../lib/api'
+import { analyzeLive, keepMedia, reportRun, STAGE_KEYS, StageError, type Health, type StageEvent, type StageKey } from '../lib/api'
 import { requestVlmCoach } from '../lib/coach'
 import { clipFrom, filesFromDataTransfer, fmtBytes, isVideo, videoMeta, type Clip } from '../lib/importers'
 import { clockLabel, failedChecks, sessionFromLive, sessionProblem } from '../lib/live'
@@ -109,7 +109,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
         patch((x) => ({ ...x, phase: 'empty', empty: why, finished: Date.now() }))
         return
       }
-      const s = sessionFromLive(r, reading, { title, climber, color, grade }, { src: r.playback.src, webm: r.playback.webm, poster: r.playback.poster })
+      const s = sessionFromLive(r, reading, { title, climber, color, grade }, await keepMedia(r.playback, health))
       const bad = failedChecks(s.analysis!.validation)
       reportRun(r.id, { status: bad.length ? 'invalid' : 'valid', summary: reading.stats, validation: s.analysis!.validation, warnings: s.analysis!.warnings, session: { duration: s.duration, offset: s.video!.offset, canvas: s.canvas, holds: s.holds.length, moves: s.moves.length, sequence: s.sequence, elapsed: s.elapsed } })
       if (bad.length) throw Object.assign(new StageError(`The result failed ${bad.length} check${bad.length > 1 ? 's' : ''}, so it was not opened.`, 'analyzing_moves'), { checks: bad })
@@ -168,8 +168,8 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
               <motion.span animate={{ y: [0, -5, 0] }} transition={{ duration: 3, repeat: Infinity, delay: 0.4 }}><ScanLine size={22} /></motion.span>
               <motion.span animate={{ y: [0, -5, 0] }} transition={{ duration: 3, repeat: Infinity, delay: 0.8 }}><Sparkles size={22} /></motion.span>
             </div>
-            <h3>Drop your climb here</h3>
-            <p>.mov · .mp4 · .webm — iPhone HDR, any orientation, up to 2 minutes</p>
+            <h3>Your climb video</h3>
+            <p>One attempt, up to 2 minutes. Straight from your camera roll, any orientation.</p>
             <div className="dz-actions">
               <button className="btn" onClick={() => fileInput.current?.click()}><Upload size={15} /> Choose a video</button>
             </div>

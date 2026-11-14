@@ -1,34 +1,36 @@
-// The analysis video: the clip with everything the replay draws over it burned
-// in — each hold where SAM 3.1 saw it, lit once used, the climber's ViTPose+
-// skeleton, the clock and the sequence. Rendered in the browser only when asked
-// for, in real time: the clip plays once into a canvas that MediaRecorder
-// records. MP4 where the browser can record it, WebM otherwise.
+// The performance reel as a video file. Rendered in the browser only when asked
+// for, in real time: the clip plays once into a canvas (reel.ts draws it), the
+// finale follows, and MediaRecorder records the lot. MP4 where the browser can
+// record H.264 (Safari, so iPhone), WebM otherwise.
 
-import { download, slug } from './download'
-import { polygonPath } from './geometry'
-import { LIMB_JOINT, overlayAt } from './overlay'
-import { BONES, DRAW_MIN_CONFIDENCE } from './skeleton'
+import { slug } from './download'
+import { drawReel, prepareReel, REEL_SIZE, type ReelFormat } from './reel'
 import { buildTimeline } from './timeline'
-import { LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session, type Vec2 } from './types'
+import type { Session } from './types'
 
-// H.264 MP4 plays everywhere; a browser that cannot record it gets WebM rather
-// than an MP4 with a codec QuickTime will not open.
-const TYPES = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']
-
-export function canExportVideo(s: Session) {
-  return Boolean(s.video?.src) && typeof MediaRecorder !== 'undefined' && typeof HTMLCanvasElement.prototype.captureStream === 'function' && TYPES.some((t) => MediaRecorder.isTypeSupported(t))
+function recorderType(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null
+  const ok = (t: string) => MediaRecorder.isTypeSupported(t)
+  for (const t of ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1']) if (ok(t)) return t
+  // Safari records H.264 under plain video/mp4. Chromium's plain MP4 is VP9,
+  // which QuickTime will not open, so there it is WebM instead.
+  if (ok('video/mp4') && !ok('video/webm')) return 'video/mp4'
+  for (const t of ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']) if (ok(t)) return t
+  return null
 }
 
-export async function exportAnalysisVideo(s: Session, { onProgress, signal }: { onProgress?: (p: number) => void; signal?: AbortSignal } = {}) {
+export function canExportVideo(s: Session) {
+  return Boolean(s.video?.src) && typeof HTMLCanvasElement !== 'undefined' && typeof HTMLCanvasElement.prototype.captureStream === 'function' && recorderType() !== null
+}
+
+export function loadClip(s: Session): Promise<HTMLVideoElement> {
   const v = s.video
-  if (!v?.src) throw new Error('This climb has no video to render.')
-  const type = TYPES.find((t) => MediaRecorder.isTypeSupported(t))
-  if (!type) throw new Error('This browser cannot record video.')
+  if (!v?.src) return Promise.reject(new Error('This climb has no video.'))
   const el = document.createElement('video')
   el.muted = true
   el.playsInline = true
   el.preload = 'auto'
-  el.crossOrigin = 'anonymous'
+  if (!v.src.startsWith('blob:')) el.crossOrigin = 'anonymous'
   for (const src of [v.src, v.webm].filter(Boolean) as string[]) {
     const so = document.createElement('source')
     so.src = src
@@ -36,102 +38,85 @@ export async function exportAnalysisVideo(s: Session, { onProgress, signal }: { 
     el.appendChild(so)
   }
   el.load()
-  await new Promise<void>((res, rej) => {
-    el.addEventListener('loadeddata', () => res(), { once: true })
-    el.addEventListener('error', () => rej(new Error('The clip could not be loaded for rendering.')), { once: true })
+  return new Promise((res, rej) => {
+    el.addEventListener('loadeddata', () => res(el), { once: true })
+    el.addEventListener('error', () => rej(new Error('The clip could not be loaded.')), { once: true })
   })
+}
 
-  const W = el.videoWidth, H = el.videoHeight
+export function loadWall(s: Session): Promise<HTMLImageElement | null> {
+  if (!s.wall?.src) return Promise.resolve(null)
+  return new Promise((res) => {
+    const img = new Image()
+    if (!s.wall!.src.startsWith('blob:')) img.crossOrigin = 'anonymous'
+    img.onload = () => res(img)
+    img.onerror = () => res(null)
+    img.src = s.wall!.src
+  })
+}
+
+export interface ReelFile { blob: Blob; name: string; seconds: number }
+
+export async function exportReel(s: Session, format: ReelFormat, { onProgress, signal }: { onProgress?: (p: number) => void; signal?: AbortSignal } = {}): Promise<ReelFile> {
+  const type = recorderType()
+  if (!type) throw new Error('This browser cannot record video.')
+  const [el, wall] = await Promise.all([loadClip(s), loadWall(s)])
+  // Safari only keeps a video's picture fresh while it is in the page.
+  el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none'
+  document.body.appendChild(el)
+  await document.fonts?.ready
+  const tl = buildTimeline(s)
+  const R = prepareReel(s, tl, el.duration, wall)
+  const [W, H] = REEL_SIZE[format]
   const canvas = document.createElement('canvas')
   canvas.width = W
   canvas.height = H
   const ctx = canvas.getContext('2d')!
-  const tl = buildTimeline(s)
-  const route = ROUTE_COLORS[s.route.color] ?? ROUTE_COLORS.green
-  const u = H / 1280 // one UI unit, at the clip's own scale
-  const P = (q: Vec2): Vec2 => [q[0] * W, q[1] * H]
-
+  const aspect = el.videoWidth / el.videoHeight
+  let ended = 0 // performance.now() when the clip finished
+  const reelTime = () => (ended ? R.clip + (performance.now() - ended) / 1000 : Math.min(el.currentTime, R.clip))
   const draw = () => {
-    const vt = el.currentTime
-    const t = vt - v.offset
-    ctx.drawImage(el, 0, 0, W, H)
-    const ov = overlayAt(s, tl, t)
-    if (ov) {
-      for (const h of ov.holds) {
-        const path = new Path2D(polygonPath(h.poly, P))
-        if (h.lit) {
-          ctx.globalAlpha = h.held ? 0.6 : 0.4
-          ctx.fillStyle = route
-          ctx.fill(path)
-          ctx.globalAlpha = 1
-        }
-        ctx.lineJoin = 'round'
-        ctx.lineWidth = (h.held ? 4.5 : 3) * u
-        ctx.strokeStyle = h.held ? '#fff' : route
-        ctx.stroke(path)
-      }
-      const j = ov.joints
-      if (j) {
-        ctx.lineCap = 'round'
-        ctx.lineWidth = 4 * u
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)'
-        for (const [a, b] of BONES) {
-          if (j[a].c < DRAW_MIN_CONFIDENCE || j[b].c < DRAW_MIN_CONFIDENCE) continue
-          const [x1, y1] = P(j[a].p), [x2, y2] = P(j[b].p)
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
-        }
-        for (const l of LIMBS) {
-          const k = j[LIMB_JOINT[l.key]]
-          if (k.c < DRAW_MIN_CONFIDENCE) continue
-          const [x, y] = P(k.p)
-          dot(ctx, x, y, (ov.holding.get(l.key) != null ? 13 : 8) * u, l.color, u)
-        }
-      }
-      for (const { key, p } of ov.fallbackLimbs) dot(ctx, P(p)[0], P(p)[1], 9 * u, LIMB_BY_KEY[key].color, u)
-    }
-    hud(ctx, s, tl.litAt(t), t, tl.climbEnd, W, H, u, route)
+    const r = Math.min(reelTime(), R.total)
+    drawReel(ctx, R, el, aspect, r, W, H)
+    onProgress?.(r / R.total)
   }
 
   const stream = canvas.captureStream(30)
-  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 })
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 10_000_000 })
   const chunks: Blob[] = []
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
   const stopped = new Promise<void>((res) => { rec.onstop = () => res() })
 
   let raf = 0
-  const frame = () => {
-    draw()
-    onProgress?.(Math.min(1, el.currentTime / (el.duration || 1)))
-    raf = 'requestVideoFrameCallback' in el ? (el as any).requestVideoFrameCallback(frame) : requestAnimationFrame(frame)
-  }
-  const cancel = () => el.pause()
-  signal?.addEventListener('abort', cancel, { once: true })
   try {
     el.currentTime = 0
     await new Promise((res) => el.addEventListener('seeked', res, { once: true }))
     draw()
     rec.start(500)
-    frame()
-    await el.play()
     await new Promise<void>((res, rej) => {
-      el.addEventListener('ended', () => res(), { once: true })
-      el.addEventListener('error', () => rej(new Error('Playback stopped while rendering.')), { once: true })
-      signal?.addEventListener('abort', () => rej(new DOMException('Cancelled', 'AbortError')), { once: true })
+      const fail = (e: Error) => { cancelAnimationFrame(raf); rej(e) }
+      const loop = () => {
+        draw()
+        if (ended && reelTime() >= R.total) return res()
+        raf = requestAnimationFrame(loop)
+      }
+      el.addEventListener('ended', () => { ended = performance.now() }, { once: true })
+      el.addEventListener('error', () => fail(new Error('Playback stopped while rendering.')), { once: true })
+      signal?.addEventListener('abort', () => fail(new DOMException('Cancelled', 'AbortError')), { once: true })
+      el.play().then(() => { raf = requestAnimationFrame(loop) }, () => fail(new Error('The browser would not play the clip for rendering.')))
     })
-    draw()
   } finally {
-    if ('cancelVideoFrameCallback' in el) (el as any).cancelVideoFrameCallback(raf)
     cancelAnimationFrame(raf)
+    el.pause()
+    el.remove()
     if (rec.state !== 'inactive') rec.stop()
-    signal?.removeEventListener('abort', cancel)
   }
   await stopped
   stream.getTracks().forEach((tr) => tr.stop())
   let blob = new Blob(chunks, { type: type.split(';')[0] })
   if (!blob.size) throw new Error('The recording came out empty.')
-  if (blob.type === 'video/webm') blob = await withWebmDuration(blob, el.duration * 1000)
-  download(`${slug(s)}-analysis.${type.startsWith('video/mp4') ? 'mp4' : 'webm'}`, blob)
-  return { bytes: blob.size, type: blob.type, seconds: el.duration }
+  if (blob.type === 'video/webm') blob = await withWebmDuration(blob, R.total * 1000)
+  return { blob, name: `${slug(s)}-reel.${blob.type === 'video/mp4' ? 'mp4' : 'webm'}`, seconds: R.total }
 }
 
 /** MediaRecorder's WebM has no Duration, so players cannot seek it. Write one
@@ -163,72 +148,4 @@ async function withWebmDuration(blob: Blob, ms: number): Promise<Blob> {
   sizeBytes[0] = 0x01
   for (let k = 7, v = newSize; k >= 1; k--, v = Math.floor(v / 256)) sizeBytes[k] = v & 0xff
   return new Blob([head.slice(0, info + 4), sizeBytes, head.slice(start, end), duration, blob.slice(end)], { type: blob.type })
-}
-
-function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, u: number) {
-  ctx.beginPath()
-  ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fillStyle = fill
-  ctx.fill()
-  ctx.lineWidth = 2.5 * u
-  ctx.strokeStyle = '#000'
-  ctx.stroke()
-}
-
-/** The clock, the route and the holds used so far, over a soft scrim. */
-function hud(ctx: CanvasRenderingContext2D, s: Session, lit: number[], t: number, climbEnd: number, W: number, H: number, u: number, route: string) {
-  ctx.save()
-  const top = ctx.createLinearGradient(0, 0, 0, 190 * u)
-  top.addColorStop(0, 'rgba(4,5,6,0.72)')
-  top.addColorStop(1, 'rgba(4,5,6,0)')
-  ctx.fillStyle = top
-  ctx.fillRect(0, 0, W, 190 * u)
-  const bottom = ctx.createLinearGradient(0, H - 200 * u, 0, H)
-  bottom.addColorStop(0, 'rgba(4,5,6,0)')
-  bottom.addColorStop(1, 'rgba(4,5,6,0.78)')
-  ctx.fillStyle = bottom
-  ctx.fillRect(0, H - 200 * u, W, 200 * u)
-
-  const pad = 36 * u
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#fff'
-  ctx.font = `800 ${30 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText('CLIMBR', pad, pad + 26 * u)
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'
-  ctx.font = `650 ${22 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText(s.title, pad, pad + 62 * u)
-  ctx.fillStyle = 'rgba(255,255,255,0.55)'
-  ctx.font = `600 ${16 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText(`${s.climber} · ${s.route.color} ${s.route.grade} · SAM 3.1 + ViTPose+ via VLM Run`, pad, pad + 88 * u)
-
-  const topped = s.toppedOut && t >= climbEnd
-  const clock = Math.max(0, Math.min(t, climbEnd))
-  ctx.textAlign = 'right'
-  ctx.fillStyle = topped ? '#F5C542' : '#fff'
-  ctx.font = `760 ${58 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText(`${clock.toFixed(2)} s`, W - pad, pad + 48 * u)
-  ctx.fillStyle = 'rgba(255,255,255,0.7)'
-  ctx.font = `700 ${18 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText(t < 0 ? 'PULLING ON' : topped ? 'TOPPED OUT' : t < climbEnd ? 'ON THE WALL' : 'CLIMB OVER', W - pad, pad + 80 * u)
-
-  ctx.textAlign = 'left'
-  ctx.fillStyle = 'rgba(255,255,255,0.6)'
-  ctx.font = `700 ${17 * u}px Geist, system-ui, sans-serif`
-  ctx.fillText(`SEQUENCE · ${lit.length}/${s.holdsDetected} HOLDS`, pad, H - pad - 58 * u)
-  // As many of the latest holds as fit on one line.
-  ctx.font = `800 ${40 * u}px Geist, system-ui, sans-serif`
-  const room = W - 2 * pad
-  while (lit.length > 1 && ctx.measureText(lit.join(' › ') + ' ').width > room) lit = lit.slice(1)
-  let x = pad
-  lit.forEach((id, i) => {
-    if (i) {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)'
-      ctx.fillText('›', x, H - pad)
-      x += ctx.measureText('› ').width
-    }
-    ctx.fillStyle = id === s.finalHoldId && topped ? '#F5C542' : route
-    ctx.fillText(String(id), x, H - pad)
-    x += ctx.measureText(`${id} `).width
-  })
-  ctx.restore()
 }

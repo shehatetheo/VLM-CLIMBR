@@ -164,6 +164,30 @@ function analyzeDirect(file: File, color: string, onEvent: (e: StageEvent) => vo
   })
 }
 
+/**
+ * Bring a run's playback copy and poster into the browser as blobs. They are
+ * then saved with the climb on this device, play without the network, and can
+ * be drawn to a canvas freely (the reel, the wall plate, the coach's frames).
+ * On Vercel the server's copies are deleted once they are here.
+ */
+export async function keepMedia(media: { src: string; webm: string | null; poster: string }, health: Health | null): Promise<{ src: string; webm: string | null; poster: string }> {
+  const local = async (url: string | null) => {
+    if (!url) return null
+    const r = await fetch(url)
+    if (!r.ok) throw new Error(`${r.status}`)
+    return URL.createObjectURL(await r.blob())
+  }
+  try {
+    const [src, webm, poster] = await Promise.all([local(media.src), local(media.webm), local(media.poster)])
+    if (health?.platform === 'vercel') {
+      void fetch('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: [media.src, media.webm, media.poster].filter(Boolean) }) }).catch(() => {})
+    }
+    return { src: src!, webm, poster: poster! }
+  } catch {
+    return media // still playable from the server
+  }
+}
+
 /** Development only: the browser's half of a run, filed beside the server's. */
 export function reportRun(id: string, report: unknown) {
   if (!import.meta.env.DEV) return

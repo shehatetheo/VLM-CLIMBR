@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { Home as HomeIcon, Play, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { TopBar } from './components/TopBar'
 import { Toaster } from './components/Toast'
@@ -63,7 +64,7 @@ export default function App() {
         {route.name === 'welcome' ? (
           <Onboarding key="welcome" onDone={(to) => go(to)} />
         ) : (
-          <motion.div key="shell" className="shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
+          <motion.div key="shell" className={`shell ${route.name === 'session' ? 'in-session' : ''}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
             <TopBar health={health} route={navId} go={go} onHealth={setHealth} />
             <main className="main">
               <AnimatePresence mode="wait">
@@ -78,6 +79,12 @@ export default function App() {
                 ))}
               </AnimatePresence>
             </main>
+            {/* iPhone: the thumb's navigation */}
+            <nav className="bottomnav" aria-label="Main">
+              <button className={route.name === 'home' ? 'on' : ''} onClick={() => go('#/')}><HomeIcon size={20} /><span>Climbs</span></button>
+              <button className="new" onClick={() => go('#/import')} aria-label="New climb"><Plus size={24} /></button>
+              <button onClick={() => go('#/session/example-green-vb')}><Play size={20} /><span>Example</span></button>
+            </nav>
           </motion.div>
         )}
       </AnimatePresence>

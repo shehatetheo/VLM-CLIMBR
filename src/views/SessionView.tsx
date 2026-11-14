@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Brain, Bug, Download, GitCompareArrows, Play } from 'lucide-react'
+import { AlertTriangle, Brain, Bug, ChevronLeft, Clapperboard, Download, GitCompareArrows, Play } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { DebugPanel } from '../components/DebugPanel'
 import { ExportSheet } from '../components/ExportSheet'
 import { LivePanel } from '../components/LivePanel'
+import { ReelView } from '../components/ReelView'
 import { RoutePanel } from '../components/RoutePanel'
 import { TimelineBar, type ViewOpts } from '../components/TimelineBar'
 import { VideoStage } from '../components/VideoStage'
@@ -16,14 +17,15 @@ import { ROUTE_COLORS, type Session } from '../lib/types'
 import { AttemptsView } from './AttemptsView'
 import { CoachView } from './CoachView'
 
-type Tab = 'replay' | 'attempts' | 'coach'
+type Tab = 'replay' | 'reel' | 'attempts' | 'coach'
 const ALL_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'replay', label: 'Replay', icon: <Play size={14} /> },
+  { id: 'reel', label: 'Reel', icon: <Clapperboard size={14} /> },
   { id: 'attempts', label: 'Attempts', icon: <GitCompareArrows size={14} /> },
   { id: 'coach', label: 'Coach', icon: <Brain size={14} /> },
 ]
 
-export function SessionView({ session: s, health, onUpdate }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void }) {
+export function SessionView({ session: s, health, onUpdate, go }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void }) {
   const tl = useMemo(() => buildTimeline(s), [s])
   const player = useMemo(() => {
     const climbEnd = tl.climbEnd
@@ -38,7 +40,8 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
 
   const [tab, setTab] = useState<Tab>('replay')
   // Attempts compares several climbs of one route; a single clip has nothing to compare.
-  const TABS = useMemo(() => ALL_TABS.filter((t) => t.id !== 'attempts' || s.comparison?.attempts.length), [s])
+  const TABS = useMemo(() => ALL_TABS.filter((t) => (t.id !== 'attempts' || s.comparison?.attempts.length) && (t.id !== 'reel' || s.video?.src)), [s])
+  useEffect(() => { if (tab !== 'replay') player.pause() }, [tab, player])
   const [opts, setOptsState] = useState<ViewOpts>(() => ({ skeleton: true, backdrop: Boolean(s.wall), letters: getPrefs().letters ?? false }))
   const setOpts = (o: ViewOpts) => { setOptsState(o); setPrefs({ letters: o.letters }) }
   const [cardDismissed, setCardDismissed] = useState(false)
@@ -56,7 +59,7 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
       if (e.code === 'Space') { e.preventDefault(); player.toggle() }
       else if (e.key === 'ArrowRight') player.seek(player.get().t + (e.shiftKey ? 2 : 0.5))
       else if (e.key === 'ArrowLeft') player.seek(player.get().t - (e.shiftKey ? 2 : 0.5))
-      else if (['1', '2', '3'].includes(e.key) && TABS[Number(e.key) - 1]) setTab(TABS[Number(e.key) - 1].id)
+      else if (['1', '2', '3', '4'].includes(e.key) && TABS[Number(e.key) - 1]) setTab(TABS[Number(e.key) - 1].id)
       else if (e.key.toLowerCase() === 'e') setExportOpen(true)
     }
     window.addEventListener('keydown', on)
@@ -69,6 +72,7 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
   return (
     <motion.section className="session" style={{ ['--route' as string]: route }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35 }}>
       <div className="session-head">
+        <button className="icon-btn sh-back" onClick={() => go('#/')} aria-label="Back to climbs"><ChevronLeft size={20} /></button>
         <div className="sh-title">
           <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>{s.title}</motion.h1>
           <div className="sh-meta">
@@ -88,7 +92,7 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
         </div>
         <div className="sh-actions">
           {import.meta.env.DEV && s.analysis && <button className="btn ghost" onClick={() => setDebugOpen((o) => !o)} title="Run details (development only)"><Bug size={15} /> Debug</button>}
-          <button className="btn primary" onClick={() => setExportOpen(true)}><Download size={15} /> Export</button>
+          <button className="btn primary" onClick={() => setExportOpen(true)} aria-label="Export"><Download size={15} /> <span className="hide-m">Export</span></button>
         </div>
       </div>
       {problem && (
@@ -119,6 +123,11 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
             <TimelineBar session={s} tl={tl} player={player} ps={ps} opts={opts} setOpts={setOpts} />
           </motion.div>
         )}
+        {tab === 'reel' && (
+          <motion.div key="reel" className="tab-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <ReelView session={s} tl={tl} />
+          </motion.div>
+        )}
         {tab === 'attempts' && (
           <motion.div key="attempts" className="tab-body scroll" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
             <AttemptsView session={s} letters={opts.letters} />
@@ -131,7 +140,7 @@ export function SessionView({ session: s, health, onUpdate }: { session: Session
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{exportOpen && <ExportSheet session={s} onClose={() => setExportOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>{exportOpen && <ExportSheet session={s} onClose={() => setExportOpen(false)} onReel={() => { setExportOpen(false); setTab('reel') }} />}</AnimatePresence>
       <AnimatePresence>{debugOpen && s.analysis && <DebugPanel session={s} onClose={() => setDebugOpen(false)} />}</AnimatePresence>
     </motion.section>
   )

@@ -46,10 +46,10 @@ export function TopBar({ health, route, go, onHealth }: { health: Health | null;
             </motion.div>
           )}
         </AnimatePresence>
-        <button className="btn ghost sm" onClick={() => go('#/welcome')}>
+        <button className="btn ghost sm hide-m" onClick={() => go('#/welcome')}>
           <Sparkles size={14} /> Intro
         </button>
-        <button className="btn primary sm" onClick={() => go('#/import')}>
+        <button className="btn primary sm hide-m" onClick={() => go('#/import')}>
           <Plus size={15} /> New climb
         </button>
       </div>

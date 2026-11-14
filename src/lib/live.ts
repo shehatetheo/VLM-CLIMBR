@@ -6,6 +6,7 @@
 // with the reason; nothing is filled in to make it look finished.
 
 import type { Reading } from './analyze'
+import { applyM, IDENTITY, invert, motionAt } from './motion'
 import { buildSession } from './session'
 import type { Check, LiveAnalysis, Session } from './types'
 import type { AnalyzeResult } from './vlm'
@@ -58,7 +59,38 @@ export function sessionFromLive(r: AnalyzeResult, reading: Reading, meta: LiveMe
     debug: r.debug,
   }
   s.analysis.validation = validateLive(s, r, reading)
+  const mpu = metersPerUnitFromBody(s)
+  if (mpu) {
+    const lowest = Math.max(...s.holds.map((h) => h.bbox[1] + h.bbox[3]))
+    s.scale = { metersPerUnit: mpu, floorY: lowest + 0.3 / mpu, source: 'estimated' }
+  }
   return s
+}
+
+/**
+ * Meters per canvas height, estimated from the climber's own body: a torso
+ * (shoulders to hips) is about half a meter on an adult. Taken at its longest
+ * over the clip, when it is square to the camera. An estimate, shown as "≈".
+ */
+function metersPerUnitFromBody(s: Session): number | null {
+  const pose = s.pose, v = s.video
+  if (!pose?.t.length || !v) return null
+  const aspect = s.canvas.width / s.canvas.height
+  const lengths: number[] = []
+  for (let i = 0; i < pose.t.length; i++) {
+    const k = pose.k[i]
+    if ([5, 6, 11, 12].some((j) => k[3 * j + 2] < 0.5)) continue
+    const toVideo = v.motion ? motionAt(v.motion, pose.t[i]) : (v.affine ?? IDENTITY)
+    if (!toVideo) continue
+    const inv = invert(toVideo)
+    const mid = (a: number, b: number) => applyM(inv, [(k[3 * a] + k[3 * b]) / 2, (k[3 * a + 1] + k[3 * b + 1]) / 2])
+    const sh = mid(5, 6), hp = mid(11, 12)
+    lengths.push(Math.hypot((sh[0] - hp[0]) * aspect, sh[1] - hp[1]))
+  }
+  if (lengths.length < 10) return null
+  lengths.sort((a, b) => a - b)
+  const torso = lengths[Math.floor(lengths.length * 0.9)]
+  return torso > 0 ? 0.5 / torso : null
 }
 
 /** Every number the replay will show, checked against what was measured. */
