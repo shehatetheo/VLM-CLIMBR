@@ -360,6 +360,85 @@ export function coachInsights(s: Session): Insight[] {
   return [...order(fixes), ...order(good), ...unsure]
 }
 
+// ── the best move ────────────────────────────────────────────────────────────
+
+/** How much each kind of highlight is worth, so the pick can be tuned. Only
+ *  things the measurements can actually show: a long reach, a run of moves
+ *  with no pause, a hold skipped, a quick fix, a foot that stayed put. (Seventeen
+ *  joints cannot tell a heel hook from a toe, so it never names one.) */
+export const BEST_RULES = {
+  reach: 1.0, // × (reach ÷ shoulder-to-hip length); a reach counts from 1.5 body-lengths of torso
+  reachMin: 1.5,
+  run: 0.45, // × placements in the longest run with no gap over runGap seconds
+  runGap: 1.0,
+  runMin: 4,
+  skip: 2.2, // a hold your other attempts needed and this one skipped
+  recovery: 1.6, // a slip fixed in under recoverySeconds
+  recoverySeconds: 0.6,
+  anchor: 0.35, // × seconds a foot stayed on one hold
+}
+
+export interface BestMove { title: string; body: string; time?: number; holds?: number[]; limbs?: LimbKey[]; kind: 'reach' | 'run' | 'skip' | 'recovery' | 'anchor' }
+
+/** The one thing worth showing off, picked from what was measured. */
+export function bestMove(s: Session): BestMove | null {
+  const B = BEST_RULES
+  const picks: (BestMove & { worth: number })[] = []
+  const aspect = s.canvas.width / Math.max(1, s.canvas.height)
+  const hold = (id: number) => s.holds.find((h) => h.id === id)
+  // Body size on the canvas, from the scale estimate (0.5 m shoulder to hip) or the holds' spread.
+  const ys = s.holds.map((h) => h.center[1])
+  const torso = s.scale ? 0.5 / s.scale.metersPerUnit : (Math.max(...ys) - Math.min(...ys)) / 5 || 0.1
+
+  // a long reach by one hand
+  for (const l of ['left_hand', 'right_hand'] as LimbKey[]) {
+    const ms = byLimb(s, l)
+    for (let i = 1; i < ms.length; i++) {
+      const a = hold(ms[i - 1].holdId), b = hold(ms[i].holdId)
+      if (!a || !b || a.id === b.id) continue
+      const d = Math.hypot((b.center[0] - a.center[0]) * aspect, b.center[1] - a.center[1])
+      const rel = d / torso
+      if (rel < B.reachMin || b.center[1] > a.center[1]) continue // only reaches upward
+      const meters = s.scale ? ` (about ${(d * s.scale.metersPerUnit).toFixed(1)} m)` : ''
+      picks.push({ kind: 'reach', worth: rel * B.reach, time: ms[i].time, holds: [a.id, b.id], limbs: [l], title: `That reach at ${at(ms[i].time)} was big.`, body: `Your ${LIMB_BY_KEY[l].name} went from ${describeHold(s, a.id)} to ${describeHold(s, b.id)} in one move${meters}. Confident.` })
+    }
+  }
+
+  // a run of moves with no pause
+  const times = [...new Set(s.moves.map((m) => m.time))].sort((x, y) => x - y)
+  let start = 0, bestRun = [0, 0]
+  for (let i = 1; i <= times.length; i++) {
+    if (i === times.length || times[i] - times[i - 1] > B.runGap) { if (i - start > bestRun[1] - bestRun[0]) bestRun = [start, i]; start = i }
+  }
+  const runLen = bestRun[1] - bestRun[0]
+  if (runLen >= B.runMin) {
+    const from = times[bestRun[0]], to = times[bestRun[1] - 1]
+    picks.push({ kind: 'run', worth: runLen * B.run, time: from, holds: handsAt(s, to), title: `From ${at(from)} to ${at(to)} you made ${runLen} moves without stopping.`, body: 'No hesitation, no re-adjusting. That is what flow looks like.' })
+  }
+
+  // a hold this attempt skipped
+  const attempts = s.comparison?.attempts ?? []
+  const mine = attempts.find((x) => x.isThis)
+  if (mine) {
+    const others = attempts.filter((x) => !x.isThis)
+    const skipped = [...new Set(others.flatMap((o) => o.sequence))].filter((id) => !mine.sequence.includes(id) && others.filter((o) => o.sequence.includes(id)).length >= Math.max(1, others.length - 1))
+    if (skipped.length) picks.push({ kind: 'skip', worth: B.skip, holds: skipped.slice(0, 1), title: `You skipped ${describeHold(s, skipped[0])} that your other attempts needed.`, body: 'Going straight past it is a bigger, more confident move, and it saved you time.' })
+  }
+
+  // a slip fixed fast
+  const quick = regrabs(s).filter((r) => r.kind === 'reset' && r.lost <= B.recoverySeconds)[0]
+  if (quick) picks.push({ kind: 'recovery', worth: B.recovery, time: quick.move.time, holds: [quick.move.holdId], limbs: [quick.move.limb], title: `Quick save at ${at(quick.move.time)}.`, body: `Your ${LIMB_BY_KEY[quick.move.limb].name} came off ${describeHold(s, quick.move.holdId)} and you had it back in ${secs(quick.lost, 1)}. Staying calm there kept the climb alive.` })
+
+  // a foot that stayed put
+  const anchor = [...s.moves].filter((m) => isFoot(m.limb)).sort((a, b) => b.duration - a.duration)[0]
+  if (anchor && anchor.duration >= 2.5) picks.push({ kind: 'anchor', worth: anchor.duration * B.anchor, time: anchor.time, holds: [anchor.holdId], limbs: [anchor.limb], title: `Your ${LIMB_BY_KEY[anchor.limb].name} did not move for ${secs(anchor.duration, 1)}.`, body: `It stayed on ${describeHold(s, anchor.holdId)} while everything else moved. A foot you can trust makes every reach easier.` })
+
+  picks.sort((a, b) => b.worth - a.worth)
+  if (!picks.length) return null
+  const { worth: _worth, ...top } = picks[0]
+  return top
+}
+
 /** One plain sentence for the top of the results. */
 export function verdict(s: Session, insights = coachInsights(s)): string {
   const T = climbTime(s)

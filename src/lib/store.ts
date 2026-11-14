@@ -96,10 +96,18 @@ export async function deleteSession(id: string) {
 }
 
 const PREFS = 'climbr:prefs'
-export interface Prefs { onboarded?: boolean; name?: string; grade?: string; color?: string; letters?: boolean }
+export type Theme = 'lime' | 'sunset' | 'midnight'
+export interface Prefs { onboarded?: boolean; name?: string; grade?: string; color?: string; letters?: boolean; theme?: Theme; sounds?: boolean; username?: string }
 export function getPrefs(): Prefs {
   try { return JSON.parse(localStorage.getItem(PREFS) ?? '{}') } catch { return {} }
 }
 export function setPrefs(p: Prefs) {
   try { localStorage.setItem(PREFS, JSON.stringify({ ...getPrefs(), ...p })) } catch { /* private mode */ }
+}
+
+const THEME_COLOR: Record<Theme, string> = { lime: '#8fd35a', sunset: '#f08a1c', midnight: '#12233f' }
+/** A theme is a token swap: one attribute on <html>, plus the browser chrome color. */
+export function applyTheme(theme: Theme = getPrefs().theme ?? 'lime') {
+  document.documentElement.dataset.theme = theme
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme])
 }

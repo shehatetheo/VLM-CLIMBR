@@ -1,5 +1,5 @@
 /* ─── CLIMBR · design tokens ─────────────────────────────────────────────── */
-:root {
+.dark {
   /* color: solid dark surfaces, one accent, four limb colors that each mean one thing */
   --bg: #0b0c0e;
   --bg-2: #101215;
@@ -31,12 +31,11 @@
   --radius-sm: 8px;
   --radius-pill: 999px;
   --tap: 44px;
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Geist Variable', Inter, system-ui, 'Segoe UI', sans-serif;
-  --mono: ui-monospace, 'SF Mono', 'Geist Mono Variable', Menlo, monospace; /* times and stats only */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --topbar: 60px;
   color-scheme: dark;
 }
+.dark { color: var(--text); }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }

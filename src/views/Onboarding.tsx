@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Check, Play, Upload } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Dices, Play, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { LogoMark } from '../components/Logo'
+import { randomUsername } from '../lib/names'
 import { getPrefs, setPrefs } from '../lib/store'
 import { ROUTE_COLORS } from '../lib/types'
+import { Backdrop, Logo, RingBurst } from '../ui'
 
 const GRADES = ['VB', 'V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7+']
 const STEPS = 5 // the splash, then four steps
@@ -15,7 +16,8 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
   const p = getPrefs()
   const [step, setStep] = useState(0)
   const [dir, setDir] = useState(1)
-  const [name, setName] = useState(p.name ?? '')
+  // A random fun name: no real names anywhere in the app.
+  const [name, setName] = useState(p.username ?? randomUsername())
   const [grade, setGrade] = useState(p.grade ?? 'V1')
   const [color, setColor] = useState(p.color ?? 'green')
 
@@ -40,16 +42,20 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
   })
 
   const finish = (to: string) => {
-    setPrefs({ onboarded: true, name: name.trim() || undefined, grade, color })
+    setPrefs({ onboarded: true, username: name, grade, color })
     onDone(to)
   }
 
   if (step === 0) {
     return (
       <motion.div className="onboarding splash-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} onClick={() => go(1)}>
-        <LogoMark size={72} />
-        <h1 className="splash-word">CLIMBR</h1>
-        <p className="splash-tag">Feedback after every climb.</p>
+        <Backdrop scene="rings" />
+        <RingBurst className="splash-rings" rings={6} />
+        {/* the wordmark sprays in: a quick scale and fade, then a few drips */}
+        <motion.div className="splash-logo reflect" initial={{ scale: 0.72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 18 }}>
+          <Logo height={132} />
+        </motion.div>
+        <p className="splash-tag">feedback after every climb.</p>
       </motion.div>
     )
   }
@@ -57,6 +63,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
   const last = step === STEPS - 1
   return (
     <motion.div className="onboarding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+      <Backdrop scene={(['skyline', 'rings', 'chalk', 'rings'] as const)[step - 1]} />
       <header className="ob-top">
         <button className="ob-icon" onClick={() => go(step - 1)} disabled={step <= 1} aria-label="Back"><ArrowLeft size={20} /></button>
         <div className="ob-progress" role="progressbar" aria-valuemin={1} aria-valuemax={STEPS - 1} aria-valuenow={step} aria-label={`Step ${step} of ${STEPS - 1}`}>
@@ -94,10 +101,10 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
             {step === 3 && (
               <div className="ob-copy">
                 <h1>Make it yours.</h1>
-                <label className="ob-field">
-                  <span>Your name</span>
-                  <input className="ob-input" ref={(el) => { if (el && !el.dataset.f && window.matchMedia('(pointer: fine)').matches) { el.dataset.f = '1'; el.focus({ preventScroll: true }) } }} value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" autoComplete="given-name" enterKeyHint="next" onKeyDown={(e) => e.key === 'Enter' && go(4)} />
-                </label>
+                <div className="ob-field">
+                  <span>Your name in the app</span>
+                  <div className="name-row"><b className="name">{name}</b><button className="gbtn chrome sm" onClick={() => setName(randomUsername())}><Dices size={16} /> new name</button></div>
+                </div>
                 <div className="ob-field">
                   <span>Your usual grade</span>
                   <div className="grades big">{GRADES.map((g) => <button key={g} className={grade === g ? 'on' : ''} aria-pressed={grade === g} onClick={() => setGrade(g)}>{g}</button>)}</div>
@@ -115,8 +122,8 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
 
             {step === 4 && (
               <div className="ob-copy center">
-                <LogoMark size={64} />
-                <h1>You’re set{name.trim() ? `, ${name.trim()}` : ''}.</h1>
+                <div className="reflect"><Logo height={96} /></div>
+                <h1>You’re set.</h1>
                 <p>After each climb you get a Coach Score and the exact moments to fix.</p>
               </div>
             )}
@@ -127,11 +134,11 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
       <footer className="ob-bottom">
         {last ? (
           <>
-            <button className="btn primary xl" onClick={() => finish('#/import')}><Upload size={18} /> Analyze my climb</button>
-            <button className="btn xl quiet" onClick={() => finish('#/session/example-green-vb')}><Play size={16} /> Watch the example first</button>
+            <button className="gbtn lg wide" onClick={() => finish('#/analyze')}><Upload size={18} /> analyze my climb</button>
+            <button className="gbtn chrome wide" onClick={() => finish('#/')}><Play size={16} /> watch an example first</button>
           </>
         ) : (
-          <button className="btn primary xl" onClick={() => go(step + 1)}>Continue <ArrowRight size={18} /></button>
+          <button className="gbtn lg wide" onClick={() => go(step + 1)}>continue <ArrowRight size={18} /></button>
         )}
       </footer>
     </motion.div>
@@ -148,11 +155,13 @@ function Bullets({ items }: { items: string[] }) {
 function ExampleClip({ label, play }: { label: string; play?: boolean }) {
   return (
     <figure className="ob-media">
+      <div className="ob-phone chrome reflect">
       <div className="ob-frame">
         {play
           ? <video src="/examples/green-vb/climb.mp4" poster="/examples/green-vb/poster.jpg" autoPlay muted loop playsInline preload="auto" />
           : <img src="/examples/green-vb/poster.jpg" alt="A climber on a green route, filmed from below" />}
         {!play && <span className="ob-rec"><i /> REC</span>}
+      </div>
       </div>
       <figcaption>{label}</figcaption>
     </figure>

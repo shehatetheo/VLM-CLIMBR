@@ -22,6 +22,8 @@ export function findOverflow(): { el: Element; why: string }[] {
     if (cs.display === 'none' || cs.visibility === 'hidden') continue
     const r = el.getBoundingClientRect()
     if (!r.width || !r.height) continue
+    if (el instanceof SVGElement && el.tagName.toLowerCase() !== 'svg') continue // an <svg> clips its own drawing
+    if (el.closest('.backdrop')) continue // decoration, clipped by its own layer
     const own = cs.overflowX === 'auto' || cs.overflowX === 'scroll' // a box that scrolls sideways on purpose is not a bug
     if (el.scrollWidth > vw) { if (!own && !scrollsSideways(el)) out.push({ el, why: `content ${el.scrollWidth}px wide in a ${vw}px viewport` }); continue }
     if ((r.right > vw + 1 || r.left < -1) && !scrollsSideways(el)) out.push({ el, why: `box ${Math.round(r.left)}…${Math.round(r.right)}px, viewport 0…${vw}px` })

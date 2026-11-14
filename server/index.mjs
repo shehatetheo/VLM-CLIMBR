@@ -6,6 +6,7 @@
 // holds and ViTPose+ to track the climber, and progress streams back as NDJSON.
 // The route itself is read in the browser (src/lib/analyze.ts).
 
+import { admin } from './admin.mjs'
 import express from 'express'
 import multer from 'multer'
 import fs from 'node:fs'
@@ -98,6 +99,12 @@ if (DEBUG) {
   })
   app.post('/api/debug/runs/:id/client', (req, res) => res.status(saveClientReport(req.params.id, req.body) ? 204 : 404).end())
 }
+
+// POST /api/admin — the moderation queue (password checked here, never in the browser).
+app.post('/api/admin', async (req, res) => {
+  const { status, json } = await admin(req.headers['x-admin-password'], req.body)
+  res.status(status).json(json)
+})
 
 // POST /api/coach  {analytics, frames?, exampleId?, mediaId?}
 // The browser normally sends its own keyframes; without them the server cuts

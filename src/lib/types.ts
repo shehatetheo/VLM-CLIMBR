@@ -171,6 +171,7 @@ export interface Session {
   usage?: { costUsd?: number }
   pose?: PoseTrack
   analysis?: LiveAnalysis
+  cloudId?: string // set once the climb is saved online
 }
 
 // ── pipeline JSON (what rock_climbing writes to data/output/<stamp>/) ────────

@@ -10,7 +10,7 @@ import { VideoStage } from '../components/VideoStage'
 import type { Health } from '../lib/api'
 import { sessionProblem } from '../lib/live'
 import { createPlayer, finaleSchedule, usePlayer } from '../lib/player'
-import { coachInsights, coachScore, secs, verdict, type Insight } from '../lib/score'
+import { coachInsights, coachScore, secs, verdict, type BestMove, type Insight } from '../lib/score'
 import { getPrefs, setPrefs } from '../lib/store'
 import { buildTimeline } from '../lib/timeline'
 import { LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session } from '../lib/types'
@@ -18,9 +18,9 @@ import { ResultsView } from './ResultsView'
 
 type Tab = 'results' | 'replay' | 'reel'
 const ALL_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'results', label: 'Results', icon: <BarChart3 size={15} /> },
-  { id: 'replay', label: 'Replay', icon: <Play size={15} /> },
-  { id: 'reel', label: 'Reel', icon: <Clapperboard size={15} /> },
+  { id: 'results', label: 'breakdown', icon: <BarChart3 size={15} /> },
+  { id: 'replay', label: 'replay', icon: <Play size={15} /> },
+  { id: 'reel', label: 'reel', icon: <Clapperboard size={15} /> },
 ]
 
 export function SessionView({ session: s, health, onUpdate, go, initialTab = 'replay' }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void; initialTab?: 'replay' | 'results' }) {
@@ -51,7 +51,18 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
   const [focus, setFocus] = useState<Insight | null>(null)
   const replayRef = useRef<HTMLDivElement>(null)
   const watch = (t: number) => { setTab('replay'); player.seek(t - 0.8); player.play(); requestAnimationFrame(() => replayRef.current?.scrollTo({ top: 0 })) }
-  const pick = (i: Insight) => { setFocus(i); if (i.time != null) watch(i.time); else setTab('replay') }
+  const pick = (i: Insight) => { setLoop(null); player.setRate(1); setFocus(i); if (i.time != null) watch(i.time); else setTab('replay') }
+  // The best move plays on a loop at half speed until it is dismissed.
+  const [loop, setLoop] = useState<[number, number] | null>(null)
+  const showBest = (b: BestMove) => {
+    if (b.time == null) return
+    setFocus({ id: 'best', kind: 'good', title: b.title, body: b.body, time: b.time, holds: b.holds, limbs: b.limbs, cost: 0 })
+    setLoop([b.time - 1, b.time + 1.6])
+    player.setRate(0.5)
+    watch(b.time - 0.2)
+  }
+  useEffect(() => { if (loop && tab === 'replay' && ps.t > loop[1]) player.seek(loop[0]) }, [loop, ps.t, tab, player])
+  const clearFocus = () => { setFocus(null); if (loop) { setLoop(null); player.setRate(1) } }
   const done = s.toppedOut && ps.t >= tl.climbEnd
 
   useEffect(() => {
@@ -72,14 +83,12 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
   return (
     <motion.section className="session" style={{ ['--route' as string]: route }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
       <div className="session-head">
-        <button className="icon-btn sh-back" onClick={() => go('#/')} aria-label="Back to climbs"><ChevronLeft size={22} /></button>
+        <button className="gbtn chrome round sh-back" onClick={() => go(s.id.startsWith('example') ? '#/' : '#/climbs')} aria-label="Back"><ChevronLeft size={22} /></button>
         <div className="sh-title">
           <h1>{s.title}</h1>
           <div className="sh-meta">
-            <span className="chip route-chip"><span className="route-dot" />{s.route.color} · {s.route.grade}</span>
-            {s.gym && <span className="chip">{s.gym}</span>}
-            <span className="chip">{s.climber}</span>
-            {s.kind === 'example' && <span className="chip">Example</span>}
+            <span className="gpill"><i style={{ background: route }} />{s.route.color} · {s.route.grade}</span>
+            {s.kind === 'example' && <span className="sticker example">example</span>}
           </div>
         </div>
         <div className="tabs" role="tablist">
@@ -91,7 +100,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
         </div>
         <div className="sh-actions">
           {import.meta.env.DEV && s.analysis && <button className="btn ghost" onClick={() => setDebugOpen((o) => !o)} title="Run details (development only)"><Bug size={15} /> Debug</button>}
-          {s.video?.src && <button className="btn" onClick={() => setTab('reel')} aria-label="Export the performance reel"><Download size={16} /> <span className="hide-m">Export</span></button>}
+          {s.video?.src && <button className="gbtn chrome round" onClick={() => setTab('reel')} aria-label="Export the performance reel"><Download size={18} /></button>}
         </div>
       </div>
       {problem && (
@@ -101,11 +110,11 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
       <AnimatePresence mode="wait" initial={false}>
         {tab === 'results' && (
           <motion.div key="results" className="tab-body scroll" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            <ResultsView session={s} tl={tl} health={health} onUpdate={onUpdate} onPick={pick} onSeek={watch} />
+            <ResultsView session={s} tl={tl} health={health} onUpdate={onUpdate} onPick={pick} onSeek={watch} onBest={showBest} />
           </motion.div>
         )}
         {tab === 'replay' && (
-          <motion.div key="replay" ref={replayRef} className="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <motion.div key="replay" ref={replayRef} className="replay dark" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             {focus ? (
               <div className="focus-note" role="status">
                 <span className="fn-text">
@@ -113,7 +122,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
                   {focus.tip && <span>{focus.tip}</span>}
                   {focus.limbs?.length ? <span className="fn-limbs">{focus.limbs.map((l) => <i key={l} style={{ background: LIMB_BY_KEY[l].color }}>{LIMB_BY_KEY[l].name}</i>)}</span> : null}
                 </span>
-                <button className="icon-btn" onClick={() => setFocus(null)} aria-label="Dismiss this note"><X size={18} /></button>
+                <button className="icon-btn" onClick={clearFocus} aria-label="Dismiss this note"><X size={18} /></button>
               </div>
             ) : !problem && (
               <button className="coach-strip" onClick={() => setTab('results')}>
@@ -123,7 +132,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
               </button>
             )}
             <div className="stage">
-              <VideoStage session={s} player={player} tl={tl} t={ps.t} />
+              <VideoStage session={s} player={player} tl={tl} t={ps.t} focusLimbs={focus?.limbs} focusHolds={focus?.holds} />
               <div className="route-wrap panel">
                 <div className="panel-label">
                   <span className="eyebrow">Route map</span>
@@ -141,7 +150,7 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
           </motion.div>
         )}
         {tab === 'reel' && (
-          <motion.div key="reel" className="tab-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <motion.div key="reel" className="tab-body dark reel-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             <ReelView session={s} tl={tl} />
           </motion.div>
         )}
