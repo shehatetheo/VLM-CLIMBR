@@ -4,7 +4,7 @@
 import { Download, Loader2, Maximize2, Pause, Play, RectangleHorizontal, RectangleVertical, RotateCcw, Share2, Video } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { download } from '../lib/download'
-import { drawReel, prepareReel, REEL_SIZE, type Reel, type ReelFormat } from '../lib/reel'
+import { drawReel, loadReelArt, prepareReel, REEL_SIZE, type Reel, type ReelFormat } from '../lib/reel'
 import type { Timeline } from '../lib/timeline'
 import type { Session } from '../lib/types'
 import { canExportVideo, exportReel, loadWall, type ReelFile } from '../lib/videoexport'
@@ -30,9 +30,9 @@ export function ReelView({ session: s, tl }: { session: Session; tl: Timeline })
     const el = video.current
     if (!el) return
     const go = async () => {
-      const wall = await loadWall(s)
+      const [wall, art] = await Promise.all([loadWall(s), loadReelArt()])
       await document.fonts?.ready
-      if (live) { setReel(prepareReel(s, tl, el.duration, wall)); setStatus('ready') }
+      if (live) { setReel(prepareReel(s, tl, el.duration, wall, art)); setStatus('ready') }
     }
     const fail = () => live && setStatus('error')
     if (el.readyState >= 2) void go()

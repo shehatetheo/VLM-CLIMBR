@@ -128,7 +128,7 @@
 .admin form { gap: var(--s-4); }
 
 /* feed */
-.feed { position: absolute; inset: 0; background: #06080a; color: #fff; }
+section.feed.dark { position: absolute; inset: 0; background: #06080a; color: #fff; }
 .feed-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; }
 .feed-scroll::-webkit-scrollbar { display: none; }
 .feed-card { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; background: #06080a; }

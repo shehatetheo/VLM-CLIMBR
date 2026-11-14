@@ -9,6 +9,7 @@
 // record it to a video file (videoexport.ts) from the same code.
 
 import { coachInsights, coachScore, verdict, type CoachScore } from './score'
+import { climbStatus, type StatusRead } from './status'
 import { holdFill } from './colors'
 import { invertAffine } from './geometry'
 import { applyM, invert, motionAt, IDENTITY, type Affine } from './motion'
@@ -20,8 +21,28 @@ import { GOLD, LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type LimbKey, type Session, typ
 export type ReelFormat = 'landscape' | 'portrait'
 export const REEL_SIZE: Record<ReelFormat, [number, number]> = { landscape: [1920, 1080], portrait: [1080, 1920] }
 
-const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Geist Variable', system-ui, sans-serif"
-const MONO = "ui-monospace, 'SF Mono', 'Geist Mono Variable', Menlo, monospace"
+const FONT = "'Selawik', 'Open Sans Variable', 'Segoe UI', system-ui, sans-serif"
+
+// The reel wears the app's look: the current color's deep page, its glow and
+// art, and its glossy primary for the capsules. Always the dark page, so the
+// clip and the wall read well in any app mode.
+interface Look { theme: 'lime' | 'sunset' | 'dusk'; bg: [string, string, string]; glow: string; art: string; a: string; b: string; edge: string; ink: string }
+const LOOKS: Record<Look['theme'], Look> = {
+  lime: { theme: 'lime', bg: ['#1f4214', '#0b1808', '#040803'], glow: 'rgba(155,227,106,0.30)', art: '#9be36a', a: '#8fd957', b: '#4fa62a', edge: '#2f7d18', ink: '#0f3608' },
+  sunset: { theme: 'sunset', bg: ['#4d260a', '#1b0e05', '#080402'], glow: 'rgba(255,160,60,0.30)', art: '#ffab3d', a: '#ffb347', b: '#f07a00', edge: '#a34f00', ink: '#2b1400' },
+  dusk: { theme: 'dusk', bg: ['#312a64', '#16132e', '#08071a'], glow: 'rgba(185,165,255,0.28)', art: '#c9bdf5', a: '#f1eefb', b: '#b4abd8', edge: '#6f6699', ink: '#1a1533' },
+}
+const currentLook = (): Look => LOOKS[(typeof document !== 'undefined' ? document.documentElement.dataset.theme : 'lime') as Look['theme']] ?? LOOKS.lime
+
+/** What the reel needs from the page before it can draw: the logo in the
+ *  current color, and Selawik loaded so the canvas can use it. */
+export async function loadReelArt(): Promise<{ logo: HTMLImageElement | null }> {
+  const { theme } = currentLook()
+  const src = theme === 'lime' ? '/brand/logo-660.webp' : `/brand/logo-${theme}-660.webp`
+  const logo = await new Promise<HTMLImageElement | null>((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src })
+  try { await Promise.all(['300', '600', '700'].map((w) => document.fonts.load(`${w} 40px Selawik`))) } catch { /* the system font stands in */ }
+  return { logo }
+}
 
 // COCO-17 bones, coloured by the limb they belong to.
 const LIMB_BONES: [number, number, LimbKey | null][] = [
@@ -42,9 +63,12 @@ export interface Reel {
   meters: { climbed: number; travelled: number } | null
   score: CoachScore
   line: string // the one thing to fix first, in a sentence
+  status: StatusRead
+  look: Look
+  logo: HTMLImageElement | null
 }
 
-export function prepareReel(s: Session, tl: Timeline, clip: number, wall: CanvasImageSource | null): Reel {
+export function prepareReel(s: Session, tl: Timeline, clip: number, wall: CanvasImageSource | null, art: { logo?: HTMLImageElement | null } = {}): Reel {
   const order = [...tl.firstUse.entries()].sort((a, b) => a[1].time - b[1].time).map(([id, f]) => ({ id, time: f.time, color: holdFill(s, id) }))
   const torso = (s.torso ?? []).filter((p) => p[0] >= 0 && p[0] <= tl.climbEnd)
   const step = order.length > 14 ? 0.22 : 0.32
@@ -60,7 +84,7 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
   }
   const insights = coachInsights(s)
   const line = insights.find((i) => i.kind === 'fix')?.short ?? insights.find((i) => i.kind === 'good')?.title ?? verdict(s, insights)
-  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line }
+  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status: climbStatus(s), look: currentLook(), logo: art.logo ?? null }
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -137,13 +161,19 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   const k = inFinale ? ease(clamp01(f / 0.8)) : 0 // 0 → split screen, 1 → the wall alone
 
   ctx.save()
-  ctx.fillStyle = '#050607'
+  const look = R.look
+  const bg = ctx.createLinearGradient(0, 0, 0, H)
+  bg.addColorStop(0, look.bg[0])
+  bg.addColorStop(0.5, look.bg[1])
+  bg.addColorStop(1, look.bg[2])
+  ctx.fillStyle = bg
   ctx.fillRect(0, 0, W, H)
-  const glow = ctx.createRadialGradient(W * 0.7, H * 0.2, 0, W * 0.7, H * 0.2, Math.max(W, H) * 0.7)
-  glow.addColorStop(0, hexA(route, 0.1))
+  const glow = ctx.createRadialGradient(W * 0.5, 0, 0, W * 0.5, 0, Math.max(W, H) * 0.75)
+  glow.addColorStop(0, look.glow)
   glow.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
+  drawBackdropArt(ctx, W, H, u, look)
 
   drawHeader(ctx, R, L.header, u, t, inFinale, route)
 
@@ -159,7 +189,7 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
     if (frame) ctx.drawImage(frame, box.x, box.y, box.w, box.h)
     drawClipOverlay(ctx, R, box, t, u * (box.h / (L.portrait ? 900 : 880)), route)
     ctx.restore()
-    panelBorder(ctx, box, 18 * u, 1 - k)
+    chromeFrame(ctx, box, 18 * u, u, 1 - k)
   }
 
   // ── the wall ──
@@ -185,18 +215,15 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
     if (a > 0) {
       ctx.save()
       ctx.globalAlpha = a
-      const h = 96 * u, y = mapRect.y + mapRect.h - h
-      roundClip(ctx, mapRect, 18 * u)
-      const shade = ctx.createLinearGradient(0, y - 40 * u, 0, y + h)
-      shade.addColorStop(0, 'rgba(5,6,7,0)')
-      shade.addColorStop(0.45, 'rgba(5,6,7,0.86)')
-      shade.addColorStop(1, 'rgba(5,6,7,0.94)')
-      ctx.fillStyle = shade
-      ctx.fillRect(mapRect.x, y - 40 * u, mapRect.w, h + 40 * u)
-      kicker(ctx, `COACH SCORE · ${R.score.total} · ${R.score.label.toUpperCase()}`, mapRect.x + 22 * u, y + 30 * u, u)
+      const h = 100 * u, strip: Rect = { x: mapRect.x + 14 * u, y: mapRect.y + mapRect.h - h - 14 * u, w: mapRect.w - 28 * u, h }
+      roundRect(ctx, strip.x, strip.y, strip.w, strip.h, 20 * u)
+      ctx.fillStyle = 'rgba(8,10,12,0.78)'
+      ctx.fill()
+      glass(ctx, strip, 20 * u, u)
+      kicker(ctx, `coach score · ${R.score.total} · ${R.score.label}`, strip.x + 22 * u, strip.y + 36 * u, u)
       ctx.fillStyle = '#fff'
-      ctx.font = `720 ${27 * u}px ${FONT}`
-      ctx.fillText(ellipsis(ctx, R.line, mapRect.w - 44 * u), mapRect.x + 22 * u, y + 66 * u)
+      ctx.font = `600 ${26 * u}px ${FONT}`
+      ctx.fillText(ellipsis(ctx, R.line, strip.w - 44 * u), strip.x + 22 * u, strip.y + 72 * u)
       ctx.restore()
     }
   }
@@ -204,37 +231,38 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
 }
 
 function drawHeader(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number, t: number, finale: boolean, route: string) {
-  const { s, tl } = R
-  // the mark: three holds and the line between them
-  const m = box.h * 0.82, mx = box.x, my = box.y + (box.h - m) / 2
-  roundRect(ctx, mx, my, m, m, m * 0.25)
-  ctx.fillStyle = '#12151a'
-  ctx.fill()
-  for (const [cx, cy, c] of [[0.3, 0.72, '#E879F9'], [0.5, 0.5, '#22D3EE'], [0.72, 0.26, '#F5C542']] as const) {
-    ctx.beginPath()
-    ctx.ellipse(mx + cx * m, my + cy * m, m * 0.1, m * 0.085, -0.4, 0, Math.PI * 2)
-    ctx.fillStyle = c
-    ctx.fill()
-  }
+  const { s, tl, look } = R
+  void route
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
-  const tx = mx + m + 18 * u
+  // the logo, in the current color, as the app shows it
+  let tx = box.x
+  if (R.logo) {
+    const h = box.h * 0.96, w = h * (R.logo.naturalWidth / Math.max(1, R.logo.naturalHeight))
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowBlur = 10 * u
+    ctx.shadowOffsetY = 3 * u
+    ctx.drawImage(R.logo, box.x, box.y + (box.h - h) / 2, w, h)
+    ctx.restore()
+    tx = box.x + w + 22 * u
+  }
+  const right = 300 * u
   ctx.fillStyle = '#fff'
-  ctx.font = `780 ${34 * u}px ${FONT}`
-  ctx.fillText(ellipsis(ctx, s.title, box.w * 0.5), tx, box.y + box.h * 0.46)
-  ctx.fillStyle = 'rgba(255,255,255,0.6)'
-  ctx.font = `600 ${20 * u}px ${FONT}`
-  ctx.fillText(ellipsis(ctx, `${s.climber} · ${s.route.color}${s.route.grade ? ` ${s.route.grade}` : ''} · SAM 3.1 + ViTPose+`, box.w * 0.55), tx, box.y + box.h * 0.86)
+  ctx.font = `300 ${42 * u}px ${FONT}`
+  ctx.fillText(ellipsis(ctx, s.title.toLowerCase(), box.x + box.w - right - tx), tx, box.y + box.h * 0.55)
+  ctx.fillStyle = 'rgba(255,255,255,0.62)'
+  ctx.font = `600 ${19 * u}px ${FONT}`
+  ctx.fillText(ellipsis(ctx, `${s.climber} · ${s.route.color} route${s.route.grade ? ` · ${s.route.grade}` : ''}`, box.x + box.w - right - tx), tx, box.y + box.h * 0.9)
 
   const done = s.toppedOut && t >= tl.climbEnd
   const clock = Math.max(0, Math.min(t, tl.climbEnd))
   ctx.textAlign = 'right'
   ctx.fillStyle = done ? GOLD : '#fff'
-  ctx.font = `760 ${58 * u}px ${FONT}`
-  ctx.fillText(`${clock.toFixed(2)} s`, box.x + box.w, box.y + box.h * 0.6)
-  ctx.fillStyle = done ? GOLD : hexA(route, 0.95)
-  ctx.font = `750 ${17 * u}px ${FONT}`
-  ctx.fillText(finale ? (s.toppedOut ? 'TOPPED OUT' : 'THE CLIMB') : t < 0 ? 'PULLING ON' : done ? 'TOPPED OUT' : t < tl.climbEnd ? 'ON THE WALL' : 'OFF THE WALL', box.x + box.w, box.y + box.h * 0.95)
+  ctx.font = `700 ${54 * u}px ${FONT}`
+  ctx.fillText(`${clock.toFixed(2)}s`, box.x + box.w, box.y + box.h * 0.55)
+  const label = finale ? (s.toppedOut ? 'topped out' : 'the climb') : t < 0 ? 'pulling on' : done ? 'topped out' : t < tl.climbEnd ? 'on the wall' : 'off the wall'
+  capsule(ctx, label, box.x + box.w, box.y + box.h * 0.66, 15 * u, u, look, 'right')
   ctx.textAlign = 'left'
 }
 
@@ -407,157 +435,88 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
     }
   }
   ctx.restore()
-  panelBorder(ctx, panel, 18 * u, 1)
+  rim(ctx, panel, 18 * u, u, 1)
 
-  // caption, as the reference titles its wall
-  ctx.fillStyle = 'rgba(255,255,255,0.9)'
-  ctx.font = `750 ${(finale ? 26 : 19) * u}px ${FONT}`
+  // the wall's title, lowercase and light like the app's headings
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.font = `300 ${(finale ? 34 : 26) * u}px ${FONT}`
   ctx.textAlign = 'left'
   const used = finale ? Math.max(0, Math.min(R.order.length, relit)) : lit.size
-  ctx.fillText(`${used} hold${used === 1 ? '' : 's'} used`, panel.x + 20 * u, panel.y + (finale ? 44 : 36) * u)
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.font = `600 ${(finale ? 16 : 13.5) * u}px ${FONT}`
-  ctx.fillText(s.video?.motion ? 'wall rebuilt from the moving camera' : 'the wall, from the clip', panel.x + 20 * u, panel.y + (finale ? 68 : 56) * u)
+  ctx.fillText(`${used} hold${used === 1 ? '' : 's'} used`, panel.x + 22 * u, panel.y + (finale ? 50 : 42) * u)
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'
+  ctx.font = `600 ${(finale ? 16 : 14) * u}px ${FONT}`
+  ctx.fillText(s.video?.motion ? 'the wall, rebuilt from the moving camera' : 'the wall, from the clip', panel.x + 22 * u, panel.y + (finale ? 76 : 64) * u)
 }
 
-/** Draws the numbers; returns whether the coach's line found room among them. */
+/** The numbers, in two glass blocks. While it plays: "so far" (time on the
+ *  wall, holds used, moves) and the sequence as glossy hold badges. In the
+ *  finale: the Coach Score in its chrome ring with the status sticker and the
+ *  coach's line, and the climb in four tiles. Returns whether the coach's line
+ *  found room here. */
 function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number, t: number, f: number, route: string, portrait: boolean): boolean {
-  const { s, tl } = R
+  const { s, tl, look } = R
   const finale = f >= 0
   const T = finale ? tl.climbEnd : Math.max(0, Math.min(t, tl.climbEnd))
-  const wide = !portrait && box.w > box.h * 1.6 // a strip: lay the blocks side by side
-  let coached = false
+  const wide = !portrait && box.w > box.h * 1.6 // a strip: the blocks side by side
   ctx.save()
-  roundRect(ctx, box.x, box.y, box.w, box.h, 18 * u)
-  ctx.fillStyle = 'rgba(255,255,255,0.035)'
-  ctx.fill()
-  panelBorder(ctx, box, 18 * u, 1)
-  const pad = 22 * u
-  const cols: Rect[] = wide
-    ? [0, 1, 2].map((i) => ({ x: box.x + pad + (i * (box.w - pad)) / 3, y: box.y + pad, w: (box.w - pad) / 3 - pad, h: box.h - 2 * pad }))
-    : (() => {
-        const h = box.h - 2 * pad
-        return [{ x: box.x + pad, y: box.y + pad, w: box.w - 2 * pad, h: h * 0.4 }, { x: box.x + pad, y: box.y + pad + h * 0.43, w: box.w - 2 * pad, h: h * 0.25 }, { x: box.x + pad, y: box.y + pad + h * 0.71, w: box.w - 2 * pad, h: h * 0.29 }]
-      })()
-  // Type grows with the room it has.
-  const z = wide ? Math.max(0.85, Math.min(1.3, box.h / (230 * u))) : Math.max(1, Math.min(1.7, box.w / (400 * u), box.h / (430 * u)))
-
-  // 1 · on a hold: one bar per limb, and the holds it has used
-  let c = cols[0]
-  kicker(ctx, 'ON A HOLD', c.x, c.y + 14 * u * z, u * z)
-  const rowH = Math.min(46 * u * z, (c.h - 26 * u * z) / 4)
-  LIMBS.forEach((l, i) => {
-    const y = c.y + 26 * u * z + i * rowH + rowH * 0.62
-    const cover = tl.coverageAt(l.key, T)
-    ctx.fillStyle = l.color
-    roundRect(ctx, c.x, y - 11 * u * z, 12 * u * z, 12 * u * z, 3 * u)
-    ctx.fill()
-    ctx.fillStyle = 'rgba(255,255,255,0.86)'
-    ctx.font = `620 ${17 * u * z}px ${FONT}`
-    ctx.textAlign = 'left'
-    ctx.fillText(l.name, c.x + 22 * u * z, y)
-    const bx = c.x + 118 * u * z, bw = Math.max(40 * u, c.w * 0.3)
-    roundRect(ctx, bx, y - 8 * u * z, bw, 6 * u * z, 3 * u * z)
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'
-    ctx.fill()
-    if (cover > 0.005) {
-      roundRect(ctx, bx, y - 8 * u * z, bw * cover, 6 * u * z, 3 * u * z)
-      ctx.fillStyle = l.color
-      ctx.fill()
-    }
-    ctx.fillStyle = '#fff'
-    ctx.font = `650 ${15 * u * z}px ${MONO}`
-    ctx.fillText(`${Math.round(cover * 100)}%`.padStart(4, ' '), bx + bw + 10 * u, y)
-    const seq = tl.sequenceAt(l.key, T)
-    ctx.fillStyle = l.color
-    ctx.font = `700 ${15 * u * z}px ${MONO}`
-    const sx = bx + bw + 64 * u * z
-    ctx.fillText(tail(ctx, seq.join(' '), c.x + c.w - sx), sx, y)
-  })
-
-  // 2 · the sequence so far
-  c = cols[1]
+  glass(ctx, box, 22 * u, u)
+  const pad = 26 * u
+  const inner: Rect = { x: box.x + pad, y: box.y + pad, w: box.w - 2 * pad, h: box.h - 2 * pad }
+  const [A, B]: Rect[] = wide
+    ? [{ ...inner, w: inner.w / 2 - pad / 2 }, { x: inner.x + inner.w / 2 + pad / 2, y: inner.y, w: inner.w / 2 - pad / 2, h: inner.h }]
+    : [{ ...inner, h: inner.h * 0.5 - pad / 2 }, { x: inner.x, y: inner.y + inner.h * 0.5 + pad / 2, w: inner.w, h: inner.h * 0.5 - pad / 2 }]
+  const z = wide ? Math.max(0.85, Math.min(1.3, box.h / (230 * u))) : Math.max(1, Math.min(1.6, box.w / (420 * u), box.h / (430 * u)))
+  const uz = u * z
   const lit = finale ? R.order.slice(0, Math.max(0, Math.floor((f - R.finale.relight) / R.finale.step) + 1)).map((o) => o.id) : tl.litAt(T)
-  kicker(ctx, c.w < 330 * u * z ? `SEQUENCE · ${lit.length}/${s.holdsDetected}` : `SEQUENCE · ${lit.length}/${s.holdsDetected} HOLDS · ${s.moves.filter((m) => m.time <= T).length} MOVES`, c.x, c.y + 14 * u * z, u * z)
-  ctx.font = `800 ${34 * u * z}px ${FONT}`
-  let shown = lit.slice()
-  while (shown.length > 1 && ctx.measureText(shown.join(' › ')).width > c.w) shown = shown.slice(1)
-  let x = c.x
-  const sy = c.y + Math.min(c.h, 74 * u * z)
-  shown.forEach((id, i) => {
-    if (i) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillText('›', x, sy); x += ctx.measureText('› ').width }
-    ctx.fillStyle = finale ? (R.order.find((o) => o.id === id)?.color ?? route) : id === s.finalHoldId && s.toppedOut ? GOLD : route
-    ctx.fillText(String(id), x, sy)
-    x += ctx.measureText(`${id} `).width
-  })
-
-  // 3 · contact lanes while it plays; the summary once it is over
-  c = cols[2]
   const sum = finale ? clamp01((f - R.finale.summary) / 0.6) : 0
+  let coached = false
+
+  if (sum < 1) {
+    ctx.globalAlpha = 1 - sum
+    const hy = heading(ctx, 'so far', A, uz, look)
+    tiles(ctx, { x: A.x, y: hy, w: A.w, h: A.y + A.h - hy }, [
+      [`${T.toFixed(1)}s`, 'on the wall', T >= tl.climbEnd && s.toppedOut],
+      [`${lit.length}/${s.holdsDetected}`, 'holds used', false],
+      [String(s.moves.filter((m) => m.time <= T).length), 'moves', false],
+    ], uz)
+    const by = heading(ctx, 'sequence', B, uz, look)
+    badges(ctx, { x: B.x, y: by, w: B.w, h: B.y + B.h - by }, lit, (id) => (finale ? (R.order.find((o) => o.id === id)?.color ?? route) : id === s.finalHoldId && s.toppedOut ? GOLD : route), uz)
+    ctx.globalAlpha = 1
+  }
   if (sum > 0) {
     ctx.globalAlpha = sum
-    kicker(ctx, 'THE CLIMB', c.x, c.y + 14 * u * z, u * z)
-    const facts: [string, string][] = [
-      [s.toppedOut && s.elapsed != null ? `${s.elapsed.toFixed(2)} s` : `${tl.climbEnd.toFixed(1)} s`, s.toppedOut ? 'to the top' : 'on the wall'],
-      [`${R.order.length}/${s.holdsDetected}`, 'holds used'],
-      [String(s.moves.length), 'moves'],
-    ]
-    if (R.meters && R.meters.climbed > 0.2) facts.push([`≈ ${R.meters.climbed.toFixed(1)} m`, 'body rose'])
-    const fw = c.w / facts.length
-    // One size for all four, small enough that the longest fits its slot.
-    let size = 34 * u * z
-    ctx.font = `760 ${size}px ${FONT}`
-    const widest = Math.max(...facts.map(([v]) => ctx.measureText(v).width))
-    if (widest > fw - 14 * u) size *= (fw - 14 * u) / widest
-    facts.forEach(([v, k], i) => {
-      ctx.fillStyle = i === 0 && s.toppedOut ? GOLD : '#fff'
-      ctx.font = `760 ${size}px ${FONT}`
-      ctx.fillText(v, c.x + i * fw, c.y + 60 * u * z)
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
-      ctx.font = `600 ${14 * u * z}px ${FONT}`
-      ctx.fillText(ellipsis(ctx, k, fw - 8 * u), c.x + i * fw, c.y + 82 * u * z)
-    })
-    // What the coach made of it, where there is room under the numbers.
-    if (c.h > 190 * u * z) {
+    // A · the Coach Score
+    const ay = heading(ctx, 'coach score', A, uz, look)
+    const area: Rect = { x: A.x, y: ay, w: A.w, h: A.y + A.h - ay }
+    if (area.h > 70 * uz && area.w > 260 * uz) {
       coached = true
-      const top = c.y + 124 * u * z
-      kicker(ctx, `COACH SCORE · ${R.score.total} · ${R.score.label.toUpperCase()}`, c.x, top, u * z)
+      const rr = Math.min(area.h * 0.46, area.w * 0.2, 86 * uz)
+      scoreRing(ctx, area.x + rr, area.y + Math.min(area.h / 2, rr + 6 * uz), rr, R.score.total, look)
+      const tx = area.x + 2 * rr + 24 * uz, tw = area.x + area.w - tx
+      ctx.textAlign = 'left'
       ctx.fillStyle = '#fff'
-      ctx.font = `700 ${22 * u * z}px ${FONT}`
-      const words = R.line.split(/\s+/)
-      const lines: string[] = ['']
-      for (const w of words) {
-        const next = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w
-        if (ctx.measureText(next).width <= c.w || !lines[lines.length - 1]) lines[lines.length - 1] = next
-        else lines.push(w)
-      }
-      const room = Math.max(1, Math.floor((c.y + c.h - top - 20 * u * z) / (28 * u * z)))
-      lines.slice(0, room).forEach((ln, i, all) => ctx.fillText(i === all.length - 1 && lines.length > room ? ellipsis(ctx, `${ln} …`, c.w) : ellipsis(ctx, ln, c.w), c.x, top + (30 + i * 28) * u * z))
+      const head = `${R.score.total} · ${R.score.label.toLowerCase()}`
+      let hs = 34 * uz
+      ctx.font = `300 ${hs}px ${FONT}`
+      if (ctx.measureText(head).width > tw) { hs = Math.max(20 * uz, hs * (tw / ctx.measureText(head).width)); ctx.font = `300 ${hs}px ${FONT}` }
+      ctx.fillText(ellipsis(ctx, head, tw), tx, area.y + 34 * uz)
+      sticker(ctx, R.status.status, tx + 4 * uz, area.y + 50 * uz, uz)
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.font = `600 ${19 * uz}px ${FONT}`
+      const lines = wrap(ctx, R.line, tw)
+      const room = Math.max(0, Math.floor((area.y + area.h - (area.y + 104 * uz)) / (25 * uz)) + 1)
+      lines.slice(0, room).forEach((ln, i) => ctx.fillText(i === room - 1 && lines.length > room ? ellipsis(ctx, `${ln} …`, tw) : ln, tx, area.y + (104 + i * 25) * uz))
     }
+    // B · the climb, in tiles
+    const cy = heading(ctx, 'the climb', B, uz, look)
+    const facts: [string, string, boolean][] = [
+      [s.toppedOut && s.elapsed != null ? `${s.elapsed.toFixed(2)}s` : `${tl.climbEnd.toFixed(1)}s`, s.toppedOut ? 'to the top' : 'on the wall', s.toppedOut],
+      [`${R.order.length}/${s.holdsDetected}`, 'holds used', false],
+      [String(s.moves.length), 'moves', false],
+    ]
+    if (R.meters && R.meters.climbed > 0.2) facts.push([`≈${R.meters.climbed.toFixed(1)}m`, 'body rose', false])
+    tiles(ctx, { x: B.x, y: cy, w: B.w, h: B.y + B.h - cy }, facts, uz)
     ctx.globalAlpha = 1
-  } else {
-    kicker(ctx, 'CONTACT', c.x, c.y + 14 * u * z, u * z)
-    const span = Math.max(0.01, tl.climbEnd)
-    const lx = c.x + 34 * u * z, lw = c.w - 34 * u * z
-    const laneH = Math.min(16 * u * z, (c.h - 30 * u * z) / 4 - 4 * u)
-    LIMBS.forEach((l, i) => {
-      const y = c.y + 28 * u * z + i * (laneH + 5 * u)
-      ctx.fillStyle = l.color
-      ctx.font = `800 ${11 * u * z}px ${MONO}`
-      ctx.fillText(l.label, c.x, y + laneH * 0.8)
-      roundRect(ctx, lx, y, lw, laneH, 4 * u)
-      ctx.fillStyle = 'rgba(255,255,255,0.05)'
-      ctx.fill()
-      for (const iv of tl.intervals[l.key]) {
-        const a = clamp01(iv.start / span), b = clamp01(iv.end / span)
-        roundRect(ctx, lx + a * lw, y, Math.max(3 * u, (b - a) * lw), laneH, 4 * u)
-        ctx.fillStyle = hexA(l.color, iv.start <= T ? 0.95 : 0.25)
-        ctx.fill()
-      }
-    })
-    const hx = lx + clamp01(T / span) * lw
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(hx - u, c.y + 24 * u * z, 2 * u, 4 * (laneH + 5 * u) + 2 * u)
   }
   ctx.restore()
   return coached
@@ -565,13 +524,314 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
 
 // ── small drawing helpers ───────────────────────────────────────────────────
 function kicker(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, u: number) {
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.font = `750 ${12.5 * u}px ${FONT}`
+  ctx.fillStyle = 'rgba(255,255,255,0.62)'
+  ctx.font = `600 ${15 * u}px ${FONT}`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  try { (ctx as any).letterSpacing = `${1.2 * u}px` } catch { /* older canvases */ }
   ctx.fillText(text, x, y)
-  try { (ctx as any).letterSpacing = '0px' } catch { /* older canvases */ }
+}
+
+/** A section title as the app draws one: light lowercase over a glossy rule.
+ *  Returns where the content under it starts. */
+function heading(ctx: CanvasRenderingContext2D, text: string, b: Rect, u: number, look: Look) {
+  ctx.textAlign = 'left'
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'
+  ctx.font = `300 ${27 * u}px ${FONT}`
+  ctx.fillText(text, b.x, b.y + 24 * u)
+  const g = ctx.createLinearGradient(b.x, 0, b.x + b.w, 0)
+  g.addColorStop(0, look.b)
+  g.addColorStop(0.4, look.a)
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  roundRect(ctx, b.x, b.y + 34 * u, b.w, 3.5 * u, 2 * u)
+  ctx.fillStyle = g
+  ctx.fill()
+  return b.y + 52 * u
+}
+
+/** Glossy capsule: the primary's gradient, a darker edge, a white sheen on top. */
+function capsule(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, u: number, look: Look, align: 'left' | 'right' = 'left') {
+  ctx.font = `700 ${size}px ${FONT}`
+  const w = ctx.measureText(text).width + size * 1.8, h = size * 2
+  const x0 = align === 'right' ? x - w : x
+  ctx.save()
+  roundRect(ctx, x0, y, w, h, h / 2)
+  const g = ctx.createLinearGradient(0, y, 0, y + h)
+  g.addColorStop(0, look.a)
+  g.addColorStop(1, look.b)
+  ctx.fillStyle = g
+  ctx.fill()
+  ctx.lineWidth = 1.5 * u
+  ctx.strokeStyle = look.edge
+  ctx.stroke()
+  roundRect(ctx, x0 + 3 * u, y + 2 * u, w - 6 * u, h * 0.46, h / 2)
+  const sheen = ctx.createLinearGradient(0, y, 0, y + h * 0.5)
+  sheen.addColorStop(0, 'rgba(255,255,255,0.7)')
+  sheen.addColorStop(1, 'rgba(255,255,255,0.12)')
+  ctx.fillStyle = sheen
+  ctx.fill()
+  ctx.fillStyle = look.ink
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, x0 + w / 2, y + h * 0.54)
+  ctx.restore()
+}
+
+/** Aero glass: a faint fill, a sheen over the top that ends on a curve, a bright rim. */
+function glass(ctx: CanvasRenderingContext2D, b: Rect, r: number, u: number, alpha = 1) {
+  ctx.save()
+  ctx.globalAlpha *= alpha
+  roundRect(ctx, b.x, b.y, b.w, b.h, r)
+  const fill = ctx.createLinearGradient(0, b.y, 0, b.y + b.h)
+  fill.addColorStop(0, 'rgba(255,255,255,0.10)')
+  fill.addColorStop(1, 'rgba(255,255,255,0.03)')
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.save()
+  roundClip(ctx, b, r)
+  const gh = Math.min(b.h * 0.4, 150 * u)
+  ctx.beginPath()
+  ctx.moveTo(b.x, b.y)
+  ctx.lineTo(b.x + b.w, b.y)
+  ctx.lineTo(b.x + b.w, b.y + gh * 0.7)
+  ctx.quadraticCurveTo(b.x + b.w / 2, b.y + gh * 1.15, b.x, b.y + gh * 0.7)
+  ctx.closePath()
+  const gl = ctx.createLinearGradient(0, b.y, 0, b.y + gh)
+  gl.addColorStop(0, 'rgba(255,255,255,0.13)')
+  gl.addColorStop(1, 'rgba(255,255,255,0.02)')
+  ctx.fillStyle = gl
+  ctx.fill()
+  ctx.restore()
+  ctx.restore()
+  rim(ctx, b, r, u, alpha)
+}
+function rim(ctx: CanvasRenderingContext2D, b: Rect, r: number, u: number, alpha: number) {
+  ctx.save()
+  ctx.globalAlpha *= alpha
+  roundRect(ctx, b.x, b.y, b.w, b.h, r)
+  const st = ctx.createLinearGradient(0, b.y, 0, b.y + b.h)
+  st.addColorStop(0, 'rgba(255,255,255,0.45)')
+  st.addColorStop(1, 'rgba(255,255,255,0.08)')
+  ctx.lineWidth = 1.6 * u
+  ctx.strokeStyle = st
+  ctx.stroke()
+  ctx.restore()
+}
+/** Brushed chrome around the clip, like the app's video bezel. */
+function chromeFrame(ctx: CanvasRenderingContext2D, b: Rect, r: number, u: number, alpha: number) {
+  if (alpha <= 0) return
+  ctx.save()
+  ctx.globalAlpha *= alpha
+  const g = ctx.createLinearGradient(0, b.y - 6 * u, 0, b.y + b.h + 6 * u)
+  g.addColorStop(0, '#f4f6f7')
+  g.addColorStop(0.4, '#c3cacf')
+  g.addColorStop(0.62, '#9aa4ab')
+  g.addColorStop(1, '#5f6970')
+  roundRect(ctx, b.x - 4 * u, b.y - 4 * u, b.w + 8 * u, b.h + 8 * u, r + 4 * u)
+  ctx.lineWidth = 7 * u
+  ctx.strokeStyle = g
+  ctx.stroke()
+  roundRect(ctx, b.x - 0.5 * u, b.y - 0.5 * u, b.w + u, b.h + u, r)
+  ctx.lineWidth = 1.2 * u
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)'
+  ctx.stroke()
+  ctx.restore()
+}
+/** Small glass tiles in a row: a big number over a lowercase label. */
+function tiles(ctx: CanvasRenderingContext2D, b: Rect, items: [string, string, boolean][], u: number) {
+  const gap = 12 * u, n = items.length
+  // Four tiles in a narrow column go two by two, when there is height for it.
+  const twoRows = n === 4 && (b.w - gap * 3) / 4 < 130 * u && b.h >= 2 * 72 * u + gap
+  const perRow = twoRows ? 2 : n
+  const w = (b.w - gap * (perRow - 1)) / perRow
+  const h = twoRows ? Math.min((b.h - gap) / 2, 130 * u) : Math.min(b.h, 150 * u)
+  if (h < 40 * u) return
+  // One size for every value, small enough that the longest fits its tile.
+  let size = Math.min(44 * u, h * 0.4)
+  ctx.font = `700 ${size}px ${FONT}`
+  const widest = Math.max(...items.map(([v]) => ctx.measureText(v).width))
+  if (widest > w - 24 * u) size *= (w - 24 * u) / widest
+  items.forEach(([v, label, gold], i) => {
+    const x = b.x + (i % perRow) * (w + gap), y0 = b.y + Math.floor(i / perRow) * (h + gap)
+    roundRect(ctx, x, y0, w, h, 16 * u)
+    const fill = ctx.createLinearGradient(0, y0, 0, y0 + h)
+    fill.addColorStop(0, 'rgba(255,255,255,0.12)')
+    fill.addColorStop(1, 'rgba(255,255,255,0.04)')
+    ctx.fillStyle = fill
+    ctx.fill()
+    rim(ctx, { x, y: y0, w, h }, 16 * u, u, 0.8)
+    ctx.textAlign = 'left'
+    ctx.fillStyle = gold ? GOLD : '#fff'
+    ctx.font = `700 ${size}px ${FONT}`
+    ctx.fillText(v, x + 14 * u, y0 + h * 0.55)
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.font = `600 ${Math.min(15 * u, h * 0.16)}px ${FONT}`
+    ctx.fillText(ellipsis(ctx, label, w - 24 * u), x + 14 * u, y0 + h * 0.82)
+  })
+}
+/** The sequence as glossy gel badges, newest last and a little bigger. As many
+ *  rows as fit; when they run out, the latest holds stay. */
+function badges(ctx: CanvasRenderingContext2D, b: Rect, ids: number[], color: (id: number) => string, u: number) {
+  if (!ids.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'
+    ctx.font = `600 ${17 * u}px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText('the first hold lights up here', b.x, b.y + 26 * u)
+    return
+  }
+  const r = Math.max(12 * u, Math.min(24 * u, b.h / 2.6)), gap = 10 * u
+  const per = Math.max(1, Math.floor((b.w + gap) / (2 * r + gap)))
+  const rows = Math.max(1, Math.min(3, Math.floor((b.h + gap) / (2 * r + gap))))
+  const shown = ids.slice(-per * rows)
+  shown.forEach((id, i) => {
+    const row = Math.floor(i / per), col = i % per
+    const cx = b.x + r + col * (2 * r + gap), cy = b.y + r + row * (2 * r + gap)
+    const last = i === shown.length - 1
+    const rr = last ? r * 1.08 : r
+    const c = color(id)
+    const g = ctx.createRadialGradient(cx - rr * 0.35, cy - rr * 0.4, rr * 0.1, cx, cy, rr)
+    g.addColorStop(0, hexA(c, 1))
+    g.addColorStop(1, shade(c, 0.6))
+    ctx.beginPath()
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2)
+    ctx.fillStyle = g
+    ctx.fill()
+    ctx.lineWidth = (last ? 3 : 1.5) * u
+    ctx.strokeStyle = last ? '#fff' : 'rgba(0,0,0,0.45)'
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(cx, cy - rr * 0.45, rr * 0.62, rr * 0.36, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.32)'
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.font = `700 ${rr * 0.92}px ${FONT}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'
+    ctx.shadowBlur = 3 * u
+    ctx.fillText(String(id), cx, cy + rr * 0.06)
+    ctx.restore()
+    ctx.textBaseline = 'alphabetic'
+  })
+  ctx.textAlign = 'left'
+}
+/** The Coach Score in a chrome ring, as on the results screen. */
+function scoreRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, value: number, look: Look) {
+  ctx.save()
+  const outer = ctx.createLinearGradient(0, cy - r, 0, cy + r)
+  outer.addColorStop(0, '#f4f6f7')
+  outer.addColorStop(0.45, '#c3cacf')
+  outer.addColorStop(1, '#7d878e')
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = outer
+  ctx.fill()
+  const track = r * 0.86
+  ctx.lineWidth = r * 0.12
+  ctx.beginPath()
+  ctx.arc(cx, cy, track, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(cx, cy, track, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.max(0, Math.min(100, value))) / 100)
+  ctx.strokeStyle = look.theme === 'dusk' ? '#7b6cc4' : look.b
+  ctx.lineCap = 'round'
+  ctx.stroke()
+  const disc = ctx.createRadialGradient(cx, cy - r * 0.35, r * 0.1, cx, cy, r * 0.72)
+  disc.addColorStop(0, '#ffffff')
+  disc.addColorStop(0.6, '#e9eef0')
+  disc.addColorStop(1, '#cfd6da')
+  ctx.beginPath()
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2)
+  ctx.fillStyle = disc
+  ctx.fill()
+  ctx.fillStyle = '#14280f'
+  ctx.font = `700 ${r * 0.78}px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(value), cx, cy + r * 0.05)
+  ctx.restore()
+}
+/** The status sticker: tilted, with a white die-cut edge. */
+function sticker(ctx: CanvasRenderingContext2D, status: StatusRead['status'], x: number, y: number, u: number) {
+  const text = status === 'sent' ? 'SENT!' : status === 'unfinished' ? 'SO CLOSE' : 'NOT SURE'
+  const [c1, c2, ink, tilt] = status === 'sent' ? ['#a6e86c', '#5cb82f', '#0f3608', -4] : status === 'unfinished' ? ['#ffc163', '#ff8a00', '#2b1400', 3] : ['#f4f6f7', '#b9c1c6', '#20262b', -2]
+  ctx.save()
+  ctx.font = `700 ${16 * u}px ${FONT}`
+  const w = ctx.measureText(text).width + 28 * u, h = 32 * u
+  ctx.translate(x + w / 2, y + h / 2)
+  ctx.rotate(((tilt as number) * Math.PI) / 180)
+  roundRect(ctx, -w / 2, -h / 2, w, h, 8 * u)
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2)
+  g.addColorStop(0, c1 as string)
+  g.addColorStop(1, c2 as string)
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'
+  ctx.shadowBlur = 8 * u
+  ctx.shadowOffsetY = 3 * u
+  ctx.fillStyle = g
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+  ctx.lineWidth = 3 * u
+  ctx.strokeStyle = '#fff'
+  ctx.stroke()
+  ctx.fillStyle = ink as string
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, 0, h * 0.04)
+  ctx.restore()
+}
+/** Decoration behind everything: a ring burst, a halftone corner, a few stars. */
+function drawBackdropArt(ctx: CanvasRenderingContext2D, W: number, H: number, u: number, look: Look) {
+  ctx.save()
+  const m = Math.min(W, H)
+  ctx.globalAlpha = 0.07
+  ctx.fillStyle = look.art
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath()
+    ctx.arc(W * 0.02, H * 0.98, m * (0.5 - i * 0.09), 0, Math.PI * 2)
+    ctx.arc(W * 0.02, H * 0.98, m * (0.455 - i * 0.09), 0, Math.PI * 2, true)
+    ctx.fill()
+  }
+  const step = 22 * u
+  for (let y = 0; y < m * 0.42; y += step) {
+    for (let x = 0; x < m * 0.5; x += step) {
+      const d = Math.hypot(x, y) / (m * 0.5)
+      if (d > 1) continue
+      ctx.globalAlpha = 0.14 * (1 - d)
+      ctx.beginPath()
+      ctx.arc(W - x - step, y + step, 5 * u * (1 - d * 0.6), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.globalAlpha = 0.22
+  ctx.strokeStyle = look.art
+  ctx.lineJoin = 'round'
+  for (const [sx, sy, sr] of [[0.94, 0.52, 18], [0.06, 0.18, 14], [0.52, 0.97, 12], [0.8, 0.88, 9]] as const) {
+    const cx = W * sx, cy = H * sy, R0 = sr * u
+    ctx.beginPath()
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R0 * 0.42 : R0
+      ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
+    }
+    ctx.closePath()
+    ctx.lineWidth = 3 * u
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {
+  const lines: string[] = ['']
+  for (const w of text.split(/\s+/)) {
+    const next = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w
+    if (ctx.measureText(next).width <= max || !lines[lines.length - 1]) lines[lines.length - 1] = next
+    else lines.push(w)
+  }
+  return lines
+}
+function shade(hex: string, k: number) {
+  const n = hex.replace('#', '')
+  const v = n.length === 3 ? n.split('').map((c) => c + c).join('') : n
+  return `rgb(${Math.round(parseInt(v.slice(0, 2), 16) * k)},${Math.round(parseInt(v.slice(2, 4), 16) * k)},${Math.round(parseInt(v.slice(4, 6), 16) * k)})`
 }
 function poly(ctx: CanvasRenderingContext2D, pts: Vec2[]) {
   ctx.beginPath()
@@ -601,23 +861,11 @@ function roundClip(ctx: CanvasRenderingContext2D, b: Rect, r: number) {
   roundRect(ctx, b.x, b.y, b.w, b.h, r)
   ctx.clip()
 }
-function panelBorder(ctx: CanvasRenderingContext2D, b: Rect, r: number, alpha: number) {
-  roundRect(ctx, b.x, b.y, b.w, b.h, r)
-  ctx.lineWidth = 1.5
-  ctx.strokeStyle = `rgba(255,255,255,${0.12 * alpha})`
-  ctx.stroke()
-}
 function ellipsis(ctx: CanvasRenderingContext2D, text: string, max: number) {
   if (ctx.measureText(text).width <= max) return text
   let s = text
   while (s.length > 1 && ctx.measureText(s + '…').width > max) s = s.slice(0, -1)
   return s + '…'
-}
-/** The end of a list that fits: the latest holds matter most. */
-function tail(ctx: CanvasRenderingContext2D, text: string, max: number) {
-  let s = text
-  while (s.length > 1 && ctx.measureText(s).width > max) s = s.slice(s.indexOf(' ') + 1 || 1)
-  return s
 }
 function hexA(hex: string, a: number) {
   const n = hex.replace('#', '')

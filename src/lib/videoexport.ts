@@ -4,7 +4,7 @@
 // record H.264 (Safari, so iPhone), WebM otherwise.
 
 import { slug } from './download'
-import { drawReel, prepareReel, REEL_SIZE, type ReelFormat } from './reel'
+import { drawReel, loadReelArt, prepareReel, REEL_SIZE, type ReelFormat } from './reel'
 import { buildTimeline } from './timeline'
 import type { Session } from './types'
 
@@ -60,13 +60,13 @@ export interface ReelFile { blob: Blob; name: string; seconds: number }
 export async function exportReel(s: Session, format: ReelFormat, { onProgress, signal }: { onProgress?: (p: number) => void; signal?: AbortSignal } = {}): Promise<ReelFile> {
   const type = recorderType()
   if (!type) throw new Error('This browser cannot record video.')
-  const [el, wall] = await Promise.all([loadClip(s), loadWall(s)])
+  const [el, wall, art] = await Promise.all([loadClip(s), loadWall(s), loadReelArt()])
   // Safari only keeps a video's picture fresh while it is in the page.
   el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none'
   document.body.appendChild(el)
   await document.fonts?.ready
   const tl = buildTimeline(s)
-  const R = prepareReel(s, tl, el.duration, wall)
+  const R = prepareReel(s, tl, el.duration, wall, art)
   const [W, H] = REEL_SIZE[format]
   const canvas = document.createElement('canvas')
   canvas.width = W
