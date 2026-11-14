@@ -82,7 +82,7 @@ export function ResultsView({ session: s, tl, health, onUpdate, onPick, onSeek, 
             <em className="eyebrow">best move</em>
             <b className="say">{best.title}</b>
             <span className="say">{best.body}</span>
-            {best.time != null && <span className="ic-meta"><em>watch it in slow-mo <ArrowUpRight size={12} /></em></span>}
+            {best.time != null && <span className="ic-meta"><em>watch this move <ArrowUpRight size={12} /></em></span>}
           </span>
         </button>
       )}

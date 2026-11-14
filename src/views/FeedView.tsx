@@ -12,18 +12,15 @@ import { ROUTE_COLORS, type Session } from '../lib/types'
 import { EmptyIcon, GlossPill, Logo, ScoreBadge, StickerBadge } from '../ui'
 
 interface Entry { key: string; climb: CloudClimb | null; session: Session | null }
-const COLORS = Object.keys(ROUTE_COLORS)
 
 /** One climb per screen, like a reel: swipe up for the next. Plays muted while
  *  it is on screen, with the analysis drawn live on top. */
 export function FeedView({ example, go }: { example: Session | null; go: (h: string) => void }) {
   const [tab, setTab] = useState<'foryou' | 'saved'>('foryou')
-  const [color, setColor] = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
   const [next, setNext] = useState<string | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [active, setActive] = useState(0)
-  const [filterOpen, setFilterOpen] = useState(false)
   const busy = useRef(false)
 
   const load = useCallback(async (cursor: string | null) => {
@@ -31,7 +28,7 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
     busy.current = true
     try {
       if (!cloudEnabled) { setEntries([]); setNext(null); setState('ready'); return }
-      const page = await fetchFeed({ cursor, color, saved: tab === 'saved' })
+      const page = await fetchFeed({ cursor, saved: tab === 'saved' })
       const fresh = page.items.map((c) => ({ key: c.id, climb: c, session: null }))
       setEntries((old) => (cursor ? [...old, ...fresh] : fresh))
       setNext(page.next)
@@ -39,15 +36,15 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
     } catch {
       setState(cursor ? 'ready' : 'error')
     } finally { busy.current = false }
-  }, [color, tab])
+  }, [tab])
   useEffect(() => { setState('loading'); setActive(0); load(null) }, [load])
 
   // The bundled example leads "for you" until the database has its own seeded examples.
   const list = useMemo(() => {
     const hasSeeded = entries.some((e) => e.climb?.is_example)
-    const lead = tab === 'foryou' && example && !hasSeeded && (!color || color === example.route.color) ? [{ key: 'example', climb: null, session: example }] : []
+    const lead = tab === 'foryou' && example && !hasSeeded ? [{ key: 'example', climb: null, session: example }] : []
     return [...lead, ...entries]
-  }, [entries, example, tab, color])
+  }, [entries, example, tab])
   useEffect(() => { if (next && active >= list.length - 2) load(next) }, [active, list.length, next, load])
 
   const patch = (key: string, p: Partial<Entry>) => setEntries((xs) => xs.map((e) => (e.key === key ? { ...e, ...p } : e)))
@@ -60,18 +57,8 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
           <button role="tab" aria-selected={tab === 'foryou'} className={tab === 'foryou' ? 'on' : ''} onClick={() => setTab('foryou')}>for you</button>
           <button role="tab" aria-selected={tab === 'saved'} className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>saved</button>
         </div>
-        <button className="feed-filter" onClick={() => setFilterOpen((x) => !x)} aria-expanded={filterOpen} aria-label="Filter by route color">
-          <i style={{ background: color ? ROUTE_COLORS[color] : 'conic-gradient(#4ade80, #38bdf8, #c084fc, #f87171, #facc15, #4ade80)' }} />
-        </button>
+        <span aria-hidden />{/* keeps the tabs centered */}
       </header>
-      <AnimatePresence>
-        {filterOpen && (
-          <motion.div className="feed-colors glass" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-            <button className={`gpill ${!color ? 'on' : ''}`} onClick={() => { setColor(null); setFilterOpen(false) }}>all colors</button>
-            {COLORS.map((c) => <button key={c} className={`gpill ${color === c ? 'on' : ''}`} onClick={() => { setColor(c); setFilterOpen(false) }}><i style={{ background: ROUTE_COLORS[c] }} />{c}</button>)}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="feed-scroll">
         {state === 'loading' && <div className="feed-card"><div className="feed-skel"><span /><span /><span /></div></div>}
@@ -82,7 +69,7 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
           <div className="feed-card"><div className="feed-msg">
             <EmptyIcon icon={tab === 'saved' ? Bookmark : Video} />
             <h3>{tab === 'saved' ? 'nothing saved yet' : 'no climbs here yet'}</h3>
-            <p>{tab === 'saved' ? 'Tap the bookmark on a climb to keep it here.' : color ? `No ${color} routes yet. Try another color.` : 'Be the first: analyze a climb and share it.'}</p>
+            <p>{tab === 'saved' ? 'Tap the bookmark on a climb to keep it here.' : 'Be the first: analyze a climb and share it.'}</p>
             <button className="gbtn" onClick={() => (tab === 'saved' ? setTab('foryou') : go('#/analyze'))}>{tab === 'saved' ? 'back to the feed' : 'analyze a climb'}</button>
           </div></div>
         )}
@@ -164,19 +151,18 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
     if (!climb) return
     try { await reportClimb(climb.id, reason); toast('Thanks. We will take a look.') } catch (e) { toast((e as Error).message, 'warn') }
   }
-  const slowMo = () => {
+  const watchAgain = () => {
     const v = video.current
     if (!v) return
     setSheet(false); setPaused(false)
-    v.currentTime = Math.max(0, (best?.time ?? 0) + offset - 1)
-    v.playbackRate = 0.5
+    v.currentTime = 0
     v.play().catch(() => {})
   }
 
   return (
     <article className="feed-card" ref={root} aria-label={`${climb?.username ?? s?.climber ?? 'A climber'}'s climb`}>
       {near && src ? (
-        <video ref={video} src={src} poster={poster} muted playsInline preload={active ? 'auto' : 'metadata'} onClick={() => setPaused((p) => !p)} onEnded={() => { if (video.current) video.current.playbackRate = 1; setSheet(true) }} />
+        <video ref={video} src={src} poster={poster} muted playsInline preload={active ? 'auto' : 'metadata'} onClick={() => setPaused((p) => !p)} onEnded={() => setSheet(true)} />
       ) : poster ? <img src={poster} alt="" /> : <div className="feed-skel"><span /><span /><span /></div>}
       {overlays && s && tl && active && <VideoOverlay session={s} tl={tl} t={t - offset} fit="cover" />}
       {paused && active && !sheet && <button className="feed-play" onClick={() => setPaused(false)} aria-label="Play"><Play size={36} fill="currentColor" /></button>}
@@ -225,7 +211,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
             {(best ?? climb?.highlight) && <div className="sheet-note best"><em>best move</em><b>{(best ?? climb!.highlight!).title}</b><span>{(best ?? climb!.highlight!).body}</span></div>}
             {notes.filter((n) => n.kind === 'fix').slice(0, 2).map((n) => <div key={n.id} className="sheet-note"><em>{n.time != null ? `at ${secs(n.time, 1)}` : 'to work on'}</em><b>{n.title}</b>{n.tip && <span>{n.tip}</span>}</div>)}
             <div className="sheet-actions">
-              <button className="gbtn" onClick={slowMo}><RotateCcw size={16} /> watch it again in slow-mo</button>
+              <button className="gbtn" onClick={watchAgain}><RotateCcw size={16} /> watch it again</button>
               {openId && <button className="gbtn chrome" onClick={() => go(`#/session/${encodeURIComponent(openId)}/results`)}>full breakdown</button>}
             </div>
           </motion.div>

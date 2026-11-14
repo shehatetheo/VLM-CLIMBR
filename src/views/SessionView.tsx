@@ -52,18 +52,14 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
   const [focus, setFocus] = useState<Insight | null>(null)
   const replayRef = useRef<HTMLDivElement>(null)
   const watch = (t: number) => { setTab('replay'); player.seek(t - 0.8); player.play(); requestAnimationFrame(() => replayRef.current?.scrollTo({ top: 0 })) }
-  const pick = (i: Insight) => { setLoop(null); player.setRate(1); setFocus(i); if (i.time != null) watch(i.time); else setTab('replay') }
-  // The best move plays on a loop at half speed until it is dismissed.
-  const [loop, setLoop] = useState<[number, number] | null>(null)
+  const pick = (i: Insight) => { setFocus(i); if (i.time != null) watch(i.time); else setTab('replay') }
+  // The best move opens the replay just before it happens, with the move highlighted.
   const showBest = (b: BestMove) => {
     if (b.time == null) return
     setFocus({ id: 'best', kind: 'good', title: b.title, body: b.body, time: b.time, holds: b.holds, limbs: b.limbs, cost: 0 })
-    setLoop([b.time - 1, b.time + 1.6])
-    player.setRate(0.5)
     watch(b.time - 0.2)
   }
-  useEffect(() => { if (loop && tab === 'replay' && ps.t > loop[1]) player.seek(loop[0]) }, [loop, ps.t, tab, player])
-  const clearFocus = () => { setFocus(null); if (loop) { setLoop(null); player.setRate(1) } }
+  const clearFocus = () => setFocus(null)
   const done = s.toppedOut && ps.t >= tl.climbEnd
 
   useEffect(() => {
