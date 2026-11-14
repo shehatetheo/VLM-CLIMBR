@@ -14,4 +14,8 @@ export function download(name: string, data: Blob | string, type = 'application/
   setTimeout(() => URL.revokeObjectURL(url), 4000)
 }
 
-export const slug = (s: Session) => `${s.title}-${s.route.color}-${s.route.grade}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+export const slug = (s: Session) => {
+  const clean = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const title = clean(s.title), route = clean(`${s.route.color}-${s.route.grade}`)
+  return title === route || !route ? title : `${title}-${route}` // "Green V2" on a green V2 says it once
+}
