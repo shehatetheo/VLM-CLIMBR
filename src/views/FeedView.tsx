@@ -131,6 +131,8 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
   const poster = s?.video?.poster || climb?.thumbUrl || undefined
   const offset = s?.video?.offset ?? 0
   const routeColor = s?.route.color ?? climb?.route_color ?? 'green'
+  // Overlays drawn into the video itself (the bundled example) cannot be switched off.
+  const baked = s?.video?.overlays === 'burned-in' || Boolean(climb?.is_example)
   const total = score?.total ?? climb?.coach_score ?? 0
   const isExample = climb ? climb.is_example : true
   const openId = climb ? `c-${climb.id}` : s?.id
@@ -164,7 +166,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
       {near && src ? (
         <video ref={video} src={src} poster={poster} muted playsInline preload={active ? 'auto' : 'metadata'} onClick={() => setPaused((p) => !p)} onEnded={() => setSheet(true)} />
       ) : poster ? <img src={poster} alt="" /> : <div className="feed-skel"><span /><span /><span /></div>}
-      {overlays && s && tl && active && <VideoOverlay session={s} tl={tl} t={t - offset} fit="cover" />}
+      {overlays && !baked && s && tl && active && <VideoOverlay session={s} tl={tl} t={t - offset} fit="cover" />}
       {paused && active && !sheet && <button className="feed-play" onClick={() => setPaused(false)} aria-label="Play"><Play size={36} fill="currentColor" /></button>}
 
       <div className="feed-info">
@@ -186,7 +188,8 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
       <div className="feed-rail">
         <button className={climb?.propped ? 'on' : ''} onClick={() => act('props')} aria-pressed={Boolean(climb?.propped)} aria-label="Give props"><HandMetal size={24} /><span>{climb?.props ?? 'props'}</span></button>
         <button className={climb?.saved ? 'on' : ''} onClick={() => act('save')} aria-pressed={Boolean(climb?.saved)} aria-label="Save this climb"><Bookmark size={24} fill={climb?.saved ? 'currentColor' : 'none'} /><span>save</span></button>
-        <button onClick={() => setOverlays((x) => !x)} aria-pressed={overlays} aria-label={overlays ? 'Hide the overlays' : 'Show the overlays'}>{overlays ? <Eye size={24} /> : <EyeOff size={24} />}<span>overlay</span></button>
+        {/* The example clip has its outlines drawn into the video itself, so there is nothing to switch off. */}
+        {!baked && <button onClick={() => setOverlays((x) => !x)} aria-pressed={overlays} aria-label={overlays ? 'Hide the overlays' : 'Show the overlays'}>{overlays ? <Eye size={24} /> : <EyeOff size={24} />}<span>overlay</span></button>}
         {climb && !climb.mine && <button onClick={() => setReporting(true)} aria-label="Report this climb"><Flag size={22} /><span>report</span></button>}
       </div>
 
