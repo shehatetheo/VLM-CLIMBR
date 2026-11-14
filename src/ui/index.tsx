@@ -1,11 +1,13 @@
 // The component kit. Each one is a thin wrapper over a material class in
 // styles/metro.css, so the look lives in one place.
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { BarChart3, Compass, Settings, Upload } from 'lucide-react'
 import { useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react'
 import { Scribble } from './art'
+import { useLook } from './look'
 
 export { Backdrop, ChalkDrip, Halftone, RingBurst, Scribble, Skyline, StarField, Swoosh } from './art'
+export { useLook } from './look'
 
 type Btn = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'chrome' | 'orange' | 'quiet'; size?: 'sm' | 'md' | 'lg'; wide?: boolean; round?: boolean }
 export function GlossButton({ tone = 'primary', size = 'md', wide, round, className = '', ...p }: Btn) {
@@ -98,7 +100,25 @@ export function BladeTabBar({ active, go }: { active: TabId | null; go: (href: s
   )
 }
 
-/** The wordmark, exactly as supplied, at the size asked for. */
+/** The wordmark, in the slime of the current color: lime is the original as
+ *  supplied, sunset and midnight are recolors of it. A new color crossfades in. */
 export function Logo({ height = 32, className = '' }: { height?: number; className?: string }) {
-  return <img className={`logo ${className}`} src="/brand/logo-330.webp" srcSet="/brand/logo-330.webp 330w, /brand/logo-660.webp 660w, /brand/logo-990.webp 990w" sizes={`${Math.round(height * 1.79)}px`} alt="CLIMBR" style={{ height }} width={Math.round(height * 1.79)} height={height} />
+  const { theme } = useLook()
+  const base = theme === 'sunset' || theme === 'midnight' ? `/brand/logo-${theme}` : '/brand/logo'
+  const w = Math.round(height * 1.79)
+  return (
+    <span className={`logo-wrap ${className}`} style={{ width: w, height }}>
+      <AnimatePresence initial={false}>
+        <motion.img key={theme} className="logo" src={`${base}-330.webp`} srcSet={`${base}-330.webp 330w, ${base}-660.webp 660w, ${base}-990.webp 990w`} sizes={`${w}px`} alt="CLIMBR" width={w} height={height} style={{ height }}
+          initial={{ opacity: 0, scale: 0.92, rotate: -3 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} exit={{ opacity: 0, scale: 1.06 }} transition={{ type: 'spring', stiffness: 360, damping: 22 }} />
+      </AnimatePresence>
+    </span>
+  )
+}
+
+/** A glossy 3D illustration (made with Higgsfield), in the current color.
+ *  `climbs-empty`, `feed-empty` and `oops`; it bobs gently in place. */
+export function Art3D({ name, size = 200, className = '' }: { name: 'climbs-empty' | 'feed-empty' | 'oops'; size?: number; className?: string }) {
+  const { theme } = useLook()
+  return <img className={`art-3d ${className}`} src={`/art/${name}-${theme}.webp`} alt="" width={size} height={size} loading="lazy" decoding="async" />
 }

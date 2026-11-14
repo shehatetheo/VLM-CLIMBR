@@ -7,7 +7,7 @@ import { coachScore, secs } from '../lib/score'
 import { climbStatus, type ClimbStatus } from '../lib/status'
 import { deleteSession, listSessions, type StoredSession } from '../lib/store'
 import type { Session } from '../lib/types'
-import { GlossButton, Logo, SectionHeader, Skyline, StickerBadge } from '../ui'
+import { Art3D, GlossButton, Logo, SectionHeader, StickerBadge } from '../ui'
 
 interface Tile { key: string; open: string; title: string; thumb: string | null; score: number; status: ClimbStatus; time: string; local: StoredSession | null; cloud: CloudClimb | null; example?: boolean }
 
@@ -61,7 +61,7 @@ export function MyClimbsView({ example, go }: { example: Session | null; go: (h:
         {tiles === null && <div className="tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="tile skel" />)}</div>}
         {tiles !== null && all.length === 0 && (
           <div className="empty">
-            <Skyline className="art" />
+            <Art3D name="climbs-empty" size={190} />
             <h3>no climbs yet</h3>
             <p>Go send something. Film one attempt and get your first Coach Score.</p>
             <GlossButton size="lg" onClick={() => go('#/analyze')}><Upload size={18} /> analyze a climb</GlossButton>

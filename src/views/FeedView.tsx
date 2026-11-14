@@ -9,7 +9,7 @@ import { pop } from '../lib/sound'
 import { climbStatus } from '../lib/status'
 import { buildTimeline } from '../lib/timeline'
 import { ROUTE_COLORS, type Session } from '../lib/types'
-import { GlossPill, Logo, ScoreBadge, StickerBadge } from '../ui'
+import { Art3D, GlossPill, Logo, ScoreBadge, StickerBadge } from '../ui'
 
 interface Entry { key: string; climb: CloudClimb | null; session: Session | null }
 const COLORS = Object.keys(ROUTE_COLORS)
@@ -76,10 +76,11 @@ export function FeedView({ example, go }: { example: Session | null; go: (h: str
       <div className="feed-scroll">
         {state === 'loading' && <div className="feed-card"><div className="feed-skel"><span /><span /><span /></div></div>}
         {state === 'error' && (
-          <div className="feed-card"><div className="feed-msg"><h3>the feed is taking a rest</h3><p>We could not load it. Check your connection and try again.</p><button className="gbtn" onClick={() => { setState('loading'); load(null) }}>try again</button></div></div>
+          <div className="feed-card"><div className="feed-msg"><Art3D name="oops" size={170} /><h3>the feed is taking a rest</h3><p>We could not load it. Check your connection and try again.</p><button className="gbtn" onClick={() => { setState('loading'); load(null) }}>try again</button></div></div>
         )}
         {state === 'ready' && list.length === 0 && (
           <div className="feed-card"><div className="feed-msg">
+            <Art3D name="feed-empty" size={190} />
             <h3>{tab === 'saved' ? 'nothing saved yet' : 'no climbs here yet'}</h3>
             <p>{tab === 'saved' ? 'Tap the bookmark on a climb to keep it here.' : color ? `No ${color} routes yet. Try another color.` : 'Be the first: analyze a climb and share it.'}</p>
             <button className="gbtn" onClick={() => (tab === 'saved' ? setTab('foryou') : go('#/analyze'))}>{tab === 'saved' ? 'back to the feed' : 'analyze a climb'}</button>

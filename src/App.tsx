@@ -5,7 +5,7 @@ import { health as fetchHealth, loadExample, type Health } from './lib/api'
 import { whoosh } from './lib/sound'
 import { getPrefs, loadSession } from './lib/store'
 import type { Session } from './lib/types'
-import { Backdrop, BladeTabBar, TABS, type TabId } from './ui'
+import { Art3D, Backdrop, BladeTabBar, TABS, type TabId } from './ui'
 import { AdminView } from './views/AdminView'
 import { FeedView } from './views/FeedView'
 import { ImportView } from './views/ImportView'
@@ -94,7 +94,7 @@ export default function App() {
               </motion.div>
             ) : (
               <motion.div key="loading" className="loading-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                {error ? <div className="empty"><h3>hmm</h3><p>{error}</p><button className="gbtn chrome" onClick={() => go('#/climbs')}>back to my climbs</button></div> : <div className="spinner" />}
+                {error ? <div className="empty"><Art3D name="oops" size={170} /><h3>hmm</h3><p>{error}</p><button className="gbtn chrome" onClick={() => go('#/climbs')}>back to my climbs</button></div> : <div className="spinner" />}
               </motion.div>
             )}
           </AnimatePresence>

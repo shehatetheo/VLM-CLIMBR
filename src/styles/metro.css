@@ -238,3 +238,7 @@ a { color: inherit; text-decoration: none; }
 .score-badge::before { content: ''; position: absolute; inset: 13%; border-radius: 50%; background: radial-gradient(circle at 50% 28%, #ffffff, #e9eef0 60%, #cfd6da); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.25); }
 .score-badge .sweep { position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.85) 50%, transparent 62%); transform: translateX(-120%); animation: sweep 1.1s 0.9s var(--ease) forwards; pointer-events: none; }
 @keyframes sweep { to { transform: translateX(120%); } }
+
+/* The logo sits in a fixed box, so a color change can crossfade two images in place. */
+.logo-wrap { position: relative; display: inline-block; flex: none; }
+.logo-wrap .logo { position: absolute; left: 0; top: 0; width: 100% !important; height: 100% !important; object-fit: contain; display: block; }

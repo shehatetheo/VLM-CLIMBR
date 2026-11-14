@@ -305,3 +305,4 @@
 /* In dark mode the feed's breakdown sheet is dark glass too (neutral, so it suits every color). */
 :root[data-mode='dark'] .feed-sheet { --text: #f2f5f3; --text-2: #c6cfca; --text-3: #a3ada7; --panel-a: #1c2220; --panel-b: #141917; --panel-edge: #39433e; --surface-3: #2c3531; --accent: var(--primary-a); }
 :root[data-mode='dark'] .empty svg.art { opacity: 0.55; }
+.splash-logo .logo-wrap { width: min(78vw, 420px) !important; height: auto !important; aspect-ratio: 1015 / 567; }

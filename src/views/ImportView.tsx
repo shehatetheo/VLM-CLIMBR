@@ -10,7 +10,7 @@ import { clipFrom, filesFromDataTransfer, fmtBytes, isVideo, videoMeta, type Cli
 import { failedChecks, sessionFromLive } from '../lib/live'
 import { getPrefs, saveSession } from '../lib/store'
 import { ROUTE_COLORS, type Check, type Session } from '../lib/types'
-import { Logo, RingBurst, SectionHeader } from '../ui'
+import { Art3D, Logo, RingBurst, SectionHeader } from '../ui'
 import { buildWallPlate } from '../lib/wallplate'
 
 const GRADES = ['VB', 'V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7+']
@@ -226,10 +226,12 @@ function AnalyzeOverlay({ run, onRetry, onClose }: { run: Run; onRetry: () => vo
   return (
     <motion.div className="analyze" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.div className={`analyze-card glass ${failed ? 'failed' : ''}`} initial={{ y: 40 }} animate={{ y: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 36 }}>
-        <div className={`pulse-hold ${failed || empty || done ? 'still' : ''}`} aria-hidden>
-          <i /><i /><i />
-          <img src="/icons/icon-192.png" alt="" />
-        </div>
+        {failed || empty ? <Art3D name="oops" size={130} className="analyze-oops" /> : (
+          <div className={`pulse-hold ${done ? 'still' : ''}`} aria-hidden>
+            <i /><i /><i />
+            <img src="/icons/icon-192.png" alt="" />
+          </div>
+        )}
         <div className="analyze-body">
           <span className="kicker">{failed ? 'Stopped' : empty ? 'Finished' : done ? 'Done' : 'Analyzing'} · {elapsed.toFixed(1)}s</span>
           <h2>{failed ? 'that did not work' : empty ? 'we could not read this clip' : done ? 'your breakdown is ready' : 'analyzing your climb'}</h2>

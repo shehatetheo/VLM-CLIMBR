@@ -3,6 +3,7 @@
 // ring bursts, halftone dots, outlined stars, rope swooshes, chalk drips, and
 // a skyline built from climbing walls.
 import { useId, type CSSProperties } from 'react'
+import { useLook } from './look'
 
 type P = { className?: string; style?: CSSProperties }
 
@@ -108,11 +109,24 @@ const BUBBLES: [number, number, number, number, number][] = [
   [68, 64, 34, 20, -26], [79, 18, 16, 7, 12], [88, 42, 27, 12, -18], [95, 14, 14, 5, 8],
 ]
 
-/** The living layer behind every tab: two slow pools of light and rising bubbles. */
+// 3D holds that drift at the edges of the page: [hold, css position, size px, seconds, depth].
+const FLOATERS: [number, CSSProperties, number, number, number][] = [
+  [3, { right: -26, top: '24%' }, 96, 26, 1],
+  [2, { left: -18, top: '55%' }, 66, 21, 1],
+  [6, { right: '6%', bottom: '15%' }, 84, 31, 1],
+]
+
+/** The living layer behind every tab: two slow pools of light, glossy 3D holds
+ *  in the theme's color drifting at the edges, and rising bubbles. */
 function Ambient() {
+  const { theme } = useLook()
   return (
     <div className="ambient">
       <i className="aurora a" /><i className="aurora b" />
+      {FLOATERS.map(([n, pos, size, dur, depth], i) => (
+        <img key={`${theme}-${i}`} className="float-hold" src={`/art/hold-${n}-${theme}.webp`} alt="" width={size} height={size} decoding="async"
+          style={{ ...pos, width: size, height: 'auto', opacity: depth, animationDuration: `${dur}s`, animationDelay: `${-i * 5}s`, ['--spin' as string]: `${i % 2 ? -1 : 1}` }} />
+      ))}
       {BUBBLES.map(([left, size, dur, delay, sway], i) => (
         <span key={i} className="bubble-path" style={{ left: `${left}%`, animationDuration: `${dur}s`, animationDelay: `${-delay}s`, ['--sway' as string]: `${sway}px` }}>
           <i className="bubble" style={{ width: size, height: size, animationDuration: `${dur / 3}s`, animationDelay: `${-delay / 2}s` }} />
