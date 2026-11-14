@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Check, Dices, Play, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { randomUsername } from '../lib/names'
 import { getPrefs, setPrefs } from '../lib/store'
 import { ROUTE_COLORS } from '../lib/types'
@@ -83,7 +83,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
                   <p>Prop your phone or hand it to a friend. Keep the whole route in frame.</p>
                   <Bullets items={['Portrait or landscape', 'One route color per clip', 'Under two minutes']} />
                 </div>
-                <ExampleClip label="Example clip" />
+                <PhoneClip mode="record" label="example clip" />
               </>
             )}
 
@@ -94,7 +94,7 @@ export function Onboarding({ onDone }: { onDone: (to: string) => void }) {
                   <p>CLIMBR finds your holds and follows your hands and feet to the top.</p>
                   <Bullets items={['We outline every hold of your color', 'We track your hands and feet, frame by frame', 'Your coach turns it into what to fix next']} />
                 </div>
-                <ExampleClip label="Holds and body, tracked" play />
+                <PhoneClip mode="track" label="holds and body, tracked" />
               </>
             )}
 
@@ -149,19 +149,66 @@ function Bullets({ items }: { items: string[] }) {
   return <ul className="ob-bullets">{items.map((x) => <li key={x}><Check size={15} strokeWidth={2.6} />{x}</li>)}</ul>
 }
 
-/** The bundled example: a 720 × 1200 render with the hold masks and skeleton
- *  already in its pixels. It is shown no larger than its own pixels allow
- *  (CSS caps the frame), so it is never blown up into a blur. */
-function ExampleClip({ label, play }: { label: string; play?: boolean }) {
+/** A muted looping video that really starts on iPhone: iOS only autoplays a
+ *  video that is muted as an attribute, which React does not write, so the
+ *  attribute is set by hand and play() is asked for again on the first touch. */
+function LoopVideo({ src, poster, onTime }: { src: string; poster: string; onTime?: (t: number) => void }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const v = ref.current
+    if (!v) return
+    v.muted = true
+    v.defaultMuted = true
+    v.setAttribute('muted', '')
+    v.setAttribute('playsinline', '')
+    v.setAttribute('webkit-playsinline', '')
+    const play = () => { v.play().catch(() => {}) }
+    play()
+    v.addEventListener('canplay', play)
+    document.addEventListener('touchstart', play, { passive: true })
+    document.addEventListener('visibilitychange', play)
+    return () => {
+      v.removeEventListener('canplay', play)
+      document.removeEventListener('touchstart', play)
+      document.removeEventListener('visibilitychange', play)
+    }
+  }, [])
+  return <video ref={ref} src={src} poster={poster} autoPlay muted loop playsInline preload="auto" onTimeUpdate={(e) => onTime?.(e.currentTarget.currentTime)} />
+}
+
+const mmss = (t: number) => `00:${String(Math.floor(t) % 60).padStart(2, '0')}`
+
+/** The example clip on a phone that floats over a soft floor shadow.
+ *  record: a camera viewfinder (REC timer, framing corners, shutter).
+ *  track: the same clip being read (a scan line and what was found). The clip
+ *  is a 720 × 1200 render with the outlines already in its pixels, and the
+ *  screen is never drawn larger than those pixels allow. */
+function PhoneClip({ mode, label }: { mode: 'record' | 'track'; label: string }) {
+  const [t, setT] = useState(0)
   return (
     <figure className="ob-media">
-      <div className="ob-phone chrome reflect">
-      <div className="ob-frame">
-        {play
-          ? <video src="/examples/green-vb/climb.mp4" poster="/examples/green-vb/poster.jpg" autoPlay muted loop playsInline preload="auto" />
-          : <img src="/examples/green-vb/poster.jpg" alt="A climber on a green route, filmed from below" />}
-        {!play && <span className="ob-rec"><i /> REC</span>}
-      </div>
+      <div className="cam-stage">
+        <div className="cam-glow" aria-hidden />
+        <div className="cam-phone">
+          <div className="cam-screen">
+            <LoopVideo src="/examples/green-vb/climb.mp4" poster="/examples/green-vb/poster.jpg" onTime={mode === 'record' ? setT : undefined} />
+            <span className="cam-island" aria-hidden />
+            {mode === 'record' ? (
+              <div className="cam-ui" aria-hidden>
+                <span className="cam-rec"><i />{mmss(t)}</span>
+                <span className="cam-corners"><i /><i /><i /><i /></span>
+                <span className="cam-bar"><span className="cam-zoom">1×</span><span className="cam-shutter"><i /></span><span className="cam-zoom ghost">1×</span></span>
+              </div>
+            ) : (
+              <div className="cam-ui" aria-hidden>
+                <span className="cam-rec reading"><i />reading</span>
+                <span className="cam-scan" />
+                <span className="cam-chips"><span><Check size={13} strokeWidth={3} />holds</span><span><Check size={13} strokeWidth={3} />hands &amp; feet</span></span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="cam-shadow" aria-hidden />
       </div>
       <figcaption>{label}</figcaption>
     </figure>
