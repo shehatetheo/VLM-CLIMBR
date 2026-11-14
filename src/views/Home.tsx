@@ -1,3 +1,4 @@
+import { coachScore, secs } from '../lib/score'
 import { motion } from 'framer-motion'
 import { AlertTriangle, ArrowRight, Brain, Clapperboard, Play, ScanLine, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -17,32 +18,24 @@ export function Home({ sessions, go }: { sessions: Session[]; go: (h: string) =>
     <motion.section className="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="hero">
         <div className="hero-copy">
-          <motion.span className="kicker" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{name ? `Welcome back, ${name}` : 'Computer vision for bouldering'}</motion.span>
+          <motion.span className="kicker" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{name ? `Welcome back, ${name}` : 'Coaching for bouldering'}</motion.span>
           <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
-            Read every <span className="grad">move.</span>
+            Feedback after every climb.
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            Film one attempt on your phone. CLIMBR finds every hold on your route with SAM 3.1, tracks all four limbs with ViTPose+, and turns it into a synced replay, a move-by-move read of your beta, and a coach’s notes.
+            Film one attempt on your phone. CLIMBR finds your holds, follows your hands and feet, and tells you exactly where the climb cost you time.
           </motion.p>
           <motion.div className="cta" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <button className="btn primary lg" onClick={() => go('#/session/example-green-vb')}><Play size={16} fill="currentColor" /> Watch the example</button>
-            <button className="btn lg" onClick={() => go('#/import')}><Upload size={16} /> Import a climb</button>
+            <button className="btn primary lg" onClick={() => go('#/import')}><Upload size={16} /> Analyze a climb</button>
+            <button className="btn lg" onClick={() => go('#/session/example-green-vb')}><Play size={16} /> Watch the example</button>
           </motion.div>
-          <motion.div className="model-row" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-            <span className="chip"><ScanLine size={12} /> SAM 3.1</span>
-            <span className="chip">ViTPose+ Large</span>
-            <span className="chip"><Brain size={12} /> VLM coach</span>
-            <span className="muted xs">all through the VLM Run gateway</span>
-          </motion.div>
+          <p className="muted xs built-on">Built on SAM 3.1 and ViTPose+ through VLM Run.</p>
         </div>
         <motion.div className="hero-visual" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15, type: 'spring', stiffness: 120, damping: 20 }}>
           <div className="hero-glow" />
           {example ? (
             <div className="hero-card card">
               <MiniRoute session={example} sequence={example.sequence} loop body height={420} />
-              <motion.div className="float f1" animate={{ y: [0, -6, 0] }} transition={{ duration: 4, repeat: Infinity }}><b>{example.elapsed?.toFixed(2)} s</b><span>topped out</span></motion.div>
-              <motion.div className="float f2" animate={{ y: [0, 6, 0] }} transition={{ duration: 4.6, repeat: Infinity }}><b>{example.sequence.length}/{example.holdsDetected}</b><span>holds used</span></motion.div>
-              <motion.div className="float f3" animate={{ y: [0, -5, 0] }} transition={{ duration: 5, repeat: Infinity }}><b>{example.utilization ? Math.round(((example.utilization.left_hand.coverage + example.utilization.right_hand.coverage) / 2) * 100) : '—'}%</b><span>hands on a hold</span></motion.div>
             </div>
           ) : <div className="spinner" />}
         </motion.div>
@@ -50,7 +43,7 @@ export function Home({ sessions, go }: { sessions: Session[]; go: (h: string) =>
 
       <div className="section-head">
         <h2>Your climbs</h2>
-        <button className="link" onClick={() => go('#/import')}>Add a climb <ArrowRight size={14} /></button>
+        <button className="link" onClick={() => go('#/import')}>New climb <ArrowRight size={14} /></button>
       </div>
       <div className="session-cards">
         {all.map((s, i) => (
@@ -58,33 +51,32 @@ export function Home({ sessions, go }: { sessions: Session[]; go: (h: string) =>
             <div className="sc-visual">
               {s.video?.poster ? <img src={s.video.poster} alt="" /> : <MiniRoute session={s} sequence={s.sequence} animate={false} height={180} />}
               <span className="sc-play"><Play size={14} fill="currentColor" /></span>
-              {s.kind === 'example' && <span className="chip accent sc-tag">Example</span>}
-              {s.kind === 'live' && (sessionProblem(s) ? <span className="chip warn sc-tag" title={sessionProblem(s)!}><AlertTriangle size={11} /> Re-analyze</span> : <span className="chip accent sc-tag">VLM Run</span>)}
+              {s.kind === 'example' && <span className="chip sc-tag">Example</span>}
+              {s.kind === 'live' && (sessionProblem(s) ? <span className="chip warn sc-tag" title={sessionProblem(s)!}><AlertTriangle size={11} /> Re-analyze</span> : null)}
             </div>
             <div className="sc-body">
               <b>{s.title}</b>
               <span className="muted xs"><span className="route-dot" style={{ background: ROUTE_COLORS[s.route.color] }} />{s.route.color} · {s.route.grade} · {s.climber}</span>
               <div className="sc-stats">
-                {s.toppedOut && s.elapsed != null ? <span><b>{s.elapsed.toFixed(2)}</b> s</span> : s.video?.duration ? <span><b>{s.video.duration.toFixed(1)}</b> s clip</span> : <span><b>—</b> s</span>}
-                <span><b>{s.sequence.length}</b>/{s.holdsDetected} holds</span>
-                <span><b>{s.moves.length}</b> moves</span>
+                <span>Score <b>{coachScore(s).total}</b></span>
+                <span>{s.toppedOut && s.elapsed != null ? <><b>{secs(s.elapsed)}</b> to the top</> : 'No top-out yet'}</span>
               </div>
             </div>
           </motion.button>
         ))}
         <motion.button className="card session-card add" onClick={() => go('#/import')} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + all.length * 0.06 }} whileHover={{ y: -4 }}>
           <Upload size={22} />
-          <b>Import a climb</b>
-          <span className="muted xs">a phone video of one attempt</span>
+          <b>New climb</b>
+          <span className="muted xs">A phone video of one attempt</span>
         </motion.button>
       </div>
 
       <div className="how">
         {[
-          { icon: <Clapperboard size={18} />, t: 'Film it', d: 'Phone on a water bottle, or in a friend’s hand. One attempt per clip.' },
-          { icon: <ScanLine size={18} />, t: 'Segment', d: 'SAM 3.1 finds every hold of your colour — no training, any gym.' },
-          { icon: <Play size={18} />, t: 'Track', d: 'ViTPose+ follows both hands and feet, frame by frame.' },
-          { icon: <Brain size={18} />, t: 'Coach', d: 'A VLM watches the clip with the numbers and tells you what to fix.' },
+          { icon: <Clapperboard size={18} />, t: 'Film one attempt', d: 'Prop your phone or hand it to a friend.' },
+          { icon: <ScanLine size={18} />, t: 'We find your holds', d: 'Every hold of your route color, in any gym.' },
+          { icon: <Play size={18} />, t: 'We track your body', d: 'Both hands and both feet, frame by frame.' },
+          { icon: <Brain size={18} />, t: 'You get feedback', d: 'A Coach Score and the exact moments to fix.' },
         ].map((x, i) => (
           <motion.div key={x.t} className="how-step" initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}>
             <span className="how-icon">{x.icon}</span>

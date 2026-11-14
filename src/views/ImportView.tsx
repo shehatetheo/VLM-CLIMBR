@@ -74,8 +74,10 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
     return { ...r, stages, phase: running.length ? running[running.length - 1] : r.phase }
   })
 
+  const maxSeconds = health?.analysis?.maxSeconds ?? 120
+  const tooLong = clip?.meta ? clip.meta.dur > maxSeconds : false
   const start = async () => {
-    if (!clip) return
+    if (!clip || tooLong) return
     abort.current?.abort()
     const ctl = new AbortController()
     abort.current = ctl
@@ -92,7 +94,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
 
       // ── analyzing_moves: the route reader, then every number checked ──
       current = 'analyzing_moves'
-      stage('analyzing_moves', { status: 'running', detail: 'Placing the camera, the holds and every contact' })
+      stage('analyzing_moves', { status: 'running', detail: 'Working out which holds you used, and when' })
       await new Promise((res) => setTimeout(res, 50))
       let reading: Reading
       try {
@@ -102,8 +104,8 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       }
       if (reading.outcome !== 'ok') {
         const why = reading.outcome === 'no-holds'
-          ? `SAM 3.1 sampled ${r.sam.samples.length} frames and found no ${color} holds it was sure of. If the route is another colour, pick it and run again.`
-          : `ViTPose+ posed ${r.pose.framesPosed} frames but found nobody on the ${color} holds.`
+          ? `We could not find any ${color} holds in this clip. Check the route color you picked, film close enough that the holds are easy to see, and avoid dim or strongly colored lighting.`
+          : `We found the ${color} holds but could not see a climber on them. Keep your whole body in the frame, and film from behind or from the side.`
         stage('analyzing_moves', { status: 'done', detail: reading.outcome === 'no-holds' ? `0 ${color} holds` : 'no climber' })
         reportRun(r.id, { status: 'empty', outcome: reading.outcome, summary: reading.stats, warnings: reading.warnings })
         patch((x) => ({ ...x, phase: 'empty', empty: why, finished: Date.now() }))
@@ -119,14 +121,14 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
 
       // ── coaching: optional. A coach that cannot answer does not sink the run. ──
       current = 'coaching'
-      stage('coaching', { status: 'running', detail: 'A VLM reads the numbers and 8 keyframes' })
+      stage('coaching', { status: 'running', detail: 'A vision model looks at 8 frames of your clip' })
       try {
         const fb = await requestVlmCoach(s, ctl.signal)
         s.coach = fb
         stage('coaching', { status: 'done', detail: `${fb.model ?? 'VLM'} · “${fb.headline}”` })
       } catch (e) {
         if ((e as Error).name === 'AbortError') throw e
-        stage('coaching', { status: 'skipped', detail: `Not this time: ${(e as Error).message}. The Coach tab can ask again.` })
+        stage('coaching', { status: 'skipped', detail: `Skipped: ${(e as Error).message}. You can ask again from Results.` })
       }
 
       const saved = await saveSession(s)
@@ -153,7 +155,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       <div className="import-head">
         <span className="kicker">New climb</span>
         <h1>Bring a climb.</h1>
-        <p className="muted">A phone video of one attempt. SAM 3.1 finds every hold of your route’s colour, ViTPose+ tracks all four limbs, and CLIMBR reads the moves, even when the camera follows you up the wall.</p>
+        <p className="muted">A phone video of one attempt. SAM 3.1 finds every hold of your route’s color, ViTPose+ tracks all four limbs, and CLIMBR reads the moves, even when the camera follows you up the wall.</p>
       </div>
 
       <div className="import-grid">
@@ -183,7 +185,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
               {clip && (
                 <motion.div key={clip.id} className="det" layout initial={{ opacity: 0, y: -8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                   <span className="det-icon"><FileVideo size={16} /></span>
-                  <span className="det-text"><b>{clip.name}</b><em>{clip.meta ? `${clip.meta.w}×${clip.meta.h} · ${clip.meta.dur.toFixed(1)} s · ` : ''}{fmtBytes(clip.size)}{clip.meta ? '' : ' · read on the server'}</em></span>
+                  <span className="det-text"><b>{clip.name}</b><em>{clip.meta ? `${clip.meta.w}×${clip.meta.h} · ${clip.meta.dur.toFixed(1)}s · ` : ''}{fmtBytes(clip.size)}{clip.meta ? '' : ' · read on the server'}</em></span>
                   <button className="icon-btn" onClick={() => setClip(null)} aria-label="Remove"><X size={14} /></button>
                 </motion.div>
               )}
@@ -197,7 +199,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
             <div className="form">
               <label><span>Route name</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. The Green Slab" /></label>
               <label><span>Climber</span><input value={climber} onChange={(e) => setClimber(e.target.value)} placeholder="Your name" /></label>
-              <div className="field"><span>Hold colour</span>
+              <div className="field"><span>Route color</span>
                 <div className="swatches">
                   {Object.entries(ROUTE_COLORS).map(([k, v]) => (
                     <button key={k} className={`swatch ${color === k ? 'on' : ''}`} style={{ background: v }} onClick={() => setColor(k)} title={k} />
@@ -216,10 +218,11 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
           <div className="card go-card">
             <div className="go-status">
               {ready ? <CheckCircle2 size={16} className="ok" /> : <span className="dot-idle" />}
-              <span>{clip ? (ready ? 'Ready to analyze' : 'The server is not ready') : 'Choose a video to start'}</span>
+              <span>{clip ? (tooLong ? 'This clip is too long' : ready ? 'Ready to analyze' : 'The server is not ready') : 'Choose a video to start'}</span>
             </div>
-            <button className="btn primary wide" disabled={!ready} onClick={start}>
-              <Sparkles size={15} /> Analyze with VLM Run
+            {tooLong && <p className="fix-note">Your clip is {Math.round(clip!.meta!.dur)} seconds and CLIMBR reads up to {maxSeconds / 60} minutes. Trim it to one attempt in your Photos app, then choose it again.</p>}
+            <button className="btn primary wide" disabled={!ready || tooLong} onClick={start}>
+              <Sparkles size={15} /> Analyze my climb
             </button>
             {health?.connected && health.ffmpeg === false && <p className="muted xs">The server has no ffmpeg. Run <code>npm install</code> (it brings ffmpeg-static) and restart it.</p>}
             {health?.connected && health.platform === 'vercel' && health.uploads !== 'blob' && <p className="muted xs">On Vercel, live analysis also needs a Blob store (Storage → Blob → connect to this project).</p>}
@@ -250,12 +253,12 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
 }
 
 const STAGES: { key: StageKey; label: string; model?: string }[] = [
-  { key: 'uploading', label: 'Uploading the clip' },
-  { key: 'extracting_frames', label: 'Reading the video', model: 'ffmpeg · 10 frames a second' },
-  { key: 'segmenting', label: 'Segmenting holds', model: 'facebook/sam3.1' },
-  { key: 'estimating_pose', label: 'Tracking the climber', model: 'vitpose-plus-large' },
-  { key: 'analyzing_moves', label: 'Reading the route', model: 'in your browser' },
-  { key: 'coaching', label: 'Coach notes', model: 'VLM · optional' },
+  { key: 'uploading', label: 'Uploading your clip' },
+  { key: 'extracting_frames', label: 'Reading the video', model: '10 frames a second' },
+  { key: 'segmenting', label: 'Finding your holds', model: 'SAM 3.1' },
+  { key: 'estimating_pose', label: 'Tracking your body', model: 'ViTPose+' },
+  { key: 'analyzing_moves', label: 'Reading your moves', model: 'on this device' },
+  { key: 'coaching', label: 'Building your report', model: 'AI coach notes · optional' },
 ]
 
 function AnalyzeOverlay({ run, color, onRetry, onClose }: { run: Run; color: string; onRetry: () => void; onClose: () => void }) {
@@ -273,8 +276,8 @@ function AnalyzeOverlay({ run, color, onRetry, onClose }: { run: Run; color: str
           <span className="chip glass"><span className="rec-dot" /> VLM Run</span>
         </div>
         <div className="analyze-body">
-          <span className="kicker">{failed ? 'Stopped' : empty ? 'Finished' : done ? 'Done' : 'Analyzing'} · {elapsed.toFixed(1)} s</span>
-          <h2>{failed ? 'Analysis failed' : empty ? 'Nothing to read' : done ? 'Climb read' : 'Reading your climb'}</h2>
+          <span className="kicker">{failed ? 'Stopped' : empty ? 'Finished' : done ? 'Done' : 'Analyzing'} · {elapsed.toFixed(1)}s</span>
+          <h2>{failed ? 'Analysis stopped' : empty ? 'We could not read this clip' : done ? 'Your report is ready' : 'Analyzing your climb'}</h2>
           <ul className="stages">
             {STAGES.map((st) => {
               const s = run.stages[st.key]
@@ -296,7 +299,7 @@ function AnalyzeOverlay({ run, color, onRetry, onClose }: { run: Run; color: str
           )}
           {empty && <p className="muted empty-note">{run.empty}</p>}
           <div className="analyze-actions">
-            {(failed || empty) && <button className="btn primary" onClick={onRetry}><RotateCcw size={15} /> Retry</button>}
+            {(failed || empty) && <button className="btn primary" onClick={onRetry}><RotateCcw size={15} /> Try again</button>}
             <button className="btn ghost" onClick={onClose}>{failed || empty ? 'Close' : 'Cancel'}</button>
             {import.meta.env.DEV && run.debug && <a className="link debug-link" href={run.debug} target="_blank" rel="noreferrer">debug log</a>}
           </div>

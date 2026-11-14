@@ -8,6 +8,7 @@
 // It is drawn on a 2D canvas, so the app can play it live at any size and
 // record it to a video file (videoexport.ts) from the same code.
 
+import { coachInsights, coachScore, verdict, type CoachScore } from './score'
 import { holdFill } from './colors'
 import { invertAffine } from './geometry'
 import { applyM, invert, motionAt, IDENTITY, type Affine } from './motion'
@@ -19,8 +20,8 @@ import { GOLD, LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type LimbKey, type Session, typ
 export type ReelFormat = 'landscape' | 'portrait'
 export const REEL_SIZE: Record<ReelFormat, [number, number]> = { landscape: [1920, 1080], portrait: [1080, 1920] }
 
-const FONT = "'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif"
-const MONO = "'Geist Mono Variable', ui-monospace, Menlo, monospace"
+const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Geist Variable', system-ui, sans-serif"
+const MONO = "ui-monospace, 'SF Mono', 'Geist Mono Variable', Menlo, monospace"
 
 // COCO-17 bones, coloured by the limb they belong to.
 const LIMB_BONES: [number, number, LimbKey | null][] = [
@@ -39,6 +40,8 @@ export interface Reel {
   order: { id: number; time: number; color: string }[] // holds in the order they were first used
   torso: [number, number, number][] // [climb seconds, x, y] on the canvas
   meters: { climbed: number; travelled: number } | null
+  score: CoachScore
+  line: string // the one thing to fix first, in a sentence
 }
 
 export function prepareReel(s: Session, tl: Timeline, clip: number, wall: CanvasImageSource | null): Reel {
@@ -55,7 +58,9 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
     // How far the body rose, and how far it moved in all: from the torso's path.
     if (ys.length > 1) meters = { climbed: (Math.max(...ys) - Math.min(...ys)) * s.scale.metersPerUnit, travelled: travelled * s.scale.metersPerUnit }
   }
-  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters }
+  const insights = coachInsights(s)
+  const line = insights.find((i) => i.kind === 'fix')?.short ?? insights.find((i) => i.kind === 'good')?.title ?? verdict(s, insights)
+  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line }
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -175,7 +180,7 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   const statsRect = mix(L.stats, under ? { ...L.stats, y: L.body.y, h: L.body.h } : statsEnd, k)
   const coached = drawStats(ctx, R, statsRect, u, t, inFinale ? f : -1, route, L.portrait)
   // Where the numbers had no room for the coach's line, it captions the wall.
-  if (inFinale && !coached && s.coach?.headline) {
+  if (inFinale && !coached) {
     const a = clamp01((f - R.finale.summary) / 0.6)
     if (a > 0) {
       ctx.save()
@@ -188,10 +193,10 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
       shade.addColorStop(1, 'rgba(5,6,7,0.94)')
       ctx.fillStyle = shade
       ctx.fillRect(mapRect.x, y - 40 * u, mapRect.w, h + 40 * u)
-      kicker(ctx, `COACH · ${s.coach.score}/100`, mapRect.x + 22 * u, y + 30 * u, u)
+      kicker(ctx, `COACH SCORE · ${R.score.total} · ${R.score.label.toUpperCase()}`, mapRect.x + 22 * u, y + 30 * u, u)
       ctx.fillStyle = '#fff'
       ctx.font = `720 ${27 * u}px ${FONT}`
-      ctx.fillText(ellipsis(ctx, s.coach.headline, mapRect.w - 44 * u), mapRect.x + 22 * u, y + 66 * u)
+      ctx.fillText(ellipsis(ctx, R.line, mapRect.w - 44 * u), mapRect.x + 22 * u, y + 66 * u)
       ctx.restore()
     }
   }
@@ -513,14 +518,13 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
       ctx.fillText(ellipsis(ctx, k, fw - 8 * u), c.x + i * fw, c.y + 82 * u * z)
     })
     // What the coach made of it, where there is room under the numbers.
-    const coach = s.coach
-    if (coach?.headline && c.h > 190 * u * z) {
+    if (c.h > 190 * u * z) {
       coached = true
       const top = c.y + 124 * u * z
-      kicker(ctx, `COACH · ${coach.score}/100`, c.x, top, u * z)
+      kicker(ctx, `COACH SCORE · ${R.score.total} · ${R.score.label.toUpperCase()}`, c.x, top, u * z)
       ctx.fillStyle = '#fff'
       ctx.font = `700 ${22 * u * z}px ${FONT}`
-      const words = coach.headline.split(/\s+/)
+      const words = R.line.split(/\s+/)
       const lines: string[] = ['']
       for (const w of words) {
         const next = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w

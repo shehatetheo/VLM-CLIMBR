@@ -44,16 +44,14 @@ The functions bundle `ffmpeg-static`, so clips (including iPhone HDR `.mov`) are
 
 | | |
 |---|---|
-| **Onboarding** | A cinematic intro. Pick your capture device, watch the real example climb play itself through the route reader, then set your name, grade and favourite hold colour. |
-| **Replay** | The clip, the route map and the live stats on one clock that runs the length of the clip. On the video, the holds sit where the camera saw them and light up as they are used, and the climber's real ViTPose+ skeleton is drawn on top. On the route map, a climber figure is solved from the four contact points and the tracked torso. You get *on a hold* percentages, each limb's holds in order, and per-limb contact lanes on a scrubbable timeline. |
-| **Finale** | Shown after the top-out: the completion card comparing every attempt (gold = holds only that attempt used), then the route relights hold by hold in limb colours with order badges while the torso path grows. |
-| **Attempts** | Time-to-top bars, a beta matrix (the order each hold was reached, per attempt) and a route map of each attempt's line. |
-| **Feedback** | What the app is for, and where a freshly read climb opens. A VLM reads the measurements plus 8 keyframes of the clip and writes a headline, scores, strengths, focus points (click one to jump the replay to that moment), drills, suggested beta and a next goal. On-device insights sit alongside. |
-| **Import** | Drop a phone video (`.mov`, `.mp4`, `.webm`; any orientation, iPhone HDR, up to 2 minutes) and it is analyzed live: uploading → reading the video → segmenting holds ‖ tracking the climber → reading the route → coach notes. Every stage reports what it measured; a stage that fails says why and offers Retry, and a clip with nothing to read (no holds of that colour, nobody climbing) says so instead of opening an empty replay. |
-| **Reel** | The whole performance in one picture: the clip with its hold masks and coloured-limb skeleton, the wall with the same skeleton and the torso path, and the numbers (per-limb *on a hold* %, sequences, contact lanes). When the clip ends, a finale relights the holds in limb colours with order badges and sums the climb up. Wide (1920×1080) for a desktop, Tall (1080×1920) for a phone. **Save video** records it in the browser (MP4 where the browser can record H.264, else WebM) and hands it to the share sheet or a download. |
-| **Export** | The performance reel, a PDF coach report, a 1080×1350 share card and a moves CSV. |
+| **Onboarding** | Four steps, each one screen with no scrolling: top bar (back, "2 of 4", Skip), content, pinned action bar. Film one attempt, how it is read, your name / grade / route color, done. |
+| **Results** | Where a freshly analyzed climb opens. **Coach Score** (0–100, a label and a one-sentence verdict, five sub-scores each with its reason), then **Coach analysis** (plain-English notes sorted by what they cost you: when, where on the wall in words, why, what to try; tap one to watch that moment), then **Your data**, collapsed: time on holds, a sideways-scrolling limb timeline, which holds each limb used, move order, every placement, and attempts compared. Optional AI coach notes from a vision model sit beside it; the score does not depend on them. |
+| **Replay** | The clip, the route map and a scrubber on one clock. The map carries one number, the order each hold was reached, with badges spread so none overlap; tap a hold for its number. On a desktop the live numbers sit beside it. |
+| **Reel** | The whole performance in one picture: the clip with its hold masks and skeleton, the wall, and the numbers. A finale relights the holds and ends on the Coach Score and the first thing to fix. Wide (1920×1080) or Tall (1080×1920). **Save video** records it in the browser (MP4 where the browser can record H.264, else WebM). |
+| **Import** | Pick a phone video (`.mov`, `.mp4`, `.webm`; any orientation, iPhone HDR, up to 2 minutes) and watch it being read: uploading → reading the video → finding your holds ‖ tracking your body → reading your moves → building your report. A clip that is too long, a route color that is not found, or a climber who cannot be seen each says how to fix it. |
+| **Export** | The performance reel. The Export button opens it; **Save video** records and shares it. |
 
-Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> seek (hold <kbd>Shift</kbd> for 2 s) · <kbd>1</kbd>–<kbd>4</kbd> views · <kbd>E</kbd> export.
+Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> seek (hold <kbd>Shift</kbd> for 2 s) · <kbd>1</kbd>–<kbd>3</kbd> views · <kbd>E</kbd> export.
 
 The 3D wall and iPhone LiDAR are parked in `attic/3d/` until the video analysis is where we want it; its README says how to bring them back.
 
@@ -112,6 +110,12 @@ node .climbr/read-run.mjs run .climbr/runs/<id>
 node .climbr/read-run.mjs raw public/examples/green-vb/gateway/sam3.1-track.json public/examples/green-vb/gateway/vitpose-plus-large.json public/examples/green-vb/climb.json
 ```
 
+## The Coach Score
+
+`src/lib/score.ts` is pure: the same climb always gets the same score. `SCORE_WEIGHTS` sets how much Efficiency, Flow, Footwork, Precision and Speed count; `SCORE_RULES` holds every threshold and penalty; the formula is written out above `coachScore()`. `coachInsights()` builds the analysis from the same measurements and sorts it by seconds lost.
+
+In development, `src/lib/devOverflow.ts` logs any element that runs off the side of the screen.
+
 ## Project layout
 
 ```
@@ -119,9 +123,9 @@ server/core.mjs    the API itself: VLM Run client, probe + frame extraction, SAM
 server/vlm.mjs     the strict adapter for SAM 3.1 and ViTPose+ responses
 server/index.mjs   Express wrapper for local runs and `npm start` (plus /api/debug in development)
 api/               the same core as Vercel functions (health, models, key, analyze, upload, cleanup, coach)
-src/lib/           route reader, camera motion, checks, session model, timeline + climber IK, overlay, reel compositor, coach, exports
-src/components/    route panel (SVG), video stage, timeline, live stats, reel player, key connection, export sheet, debug panel
-src/views/         onboarding, home, session (replay · reel · attempts · feedback), import
+src/lib/           route reader, camera motion, checks, session model, timeline + climber IK, overlay, reel compositor, Coach Score + insights (score.ts), AI coach
+src/components/    route panel (SVG), video stage, timeline, live stats, your-data sections, reel player, key connection, debug panel
+src/views/         onboarding, home, session (results · replay · reel), import
 attic/3d/          the parked 3D wall and LiDAR view
 public/examples/   the example climb: pipeline JSON, raw gateway JSON, clip, wall plate, coach feedback
 tools/             read-run.ts: the browser's route reader, run in Node on saved gateway output

@@ -417,7 +417,7 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
       src = { name, ...probeVideo(original, name) }
       run.source = src
       log('source', JSON.stringify(src))
-      if (src.duration > MAX_CLIP_SECONDS) throw httpError(422, `The clip is ${src.duration.toFixed(0)} s long; CLIMBR reads clips up to ${MAX_CLIP_SECONDS} s. Trim it to the climb and try again.`)
+      if (src.duration > MAX_CLIP_SECONDS) throw httpError(422, `This clip is ${Math.round(src.duration)} seconds long and CLIMBR reads up to ${MAX_CLIP_SECONDS / 60} minutes. Trim it to one attempt in your Photos app, then pick it again.`)
       stage('extracting_frames', 'running', { detail: `${src.width}×${src.height} · ${round3(src.fps)} fps · ${src.duration.toFixed(2)} s · ${src.frameCount} frames`, progress: 0 })
       media = await extractMedia(original, dir, src, { signal, onProgress: (p) => stage('extracting_frames', 'running', { progress: p }) })
       run.analysis = media.analysis

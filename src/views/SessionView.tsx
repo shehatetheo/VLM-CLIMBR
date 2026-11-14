@@ -1,32 +1,29 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Brain, Bug, ChevronLeft, ChevronRight, Clapperboard, Download, GitCompareArrows, Play } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, BarChart3, Bug, ChevronLeft, ChevronRight, Clapperboard, Download, Play, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DebugPanel } from '../components/DebugPanel'
-import { ExportSheet } from '../components/ExportSheet'
 import { LivePanel } from '../components/LivePanel'
 import { ReelView } from '../components/ReelView'
 import { RoutePanel } from '../components/RoutePanel'
 import { TimelineBar, type ViewOpts } from '../components/TimelineBar'
 import { VideoStage } from '../components/VideoStage'
 import type { Health } from '../lib/api'
-import { onDeviceFeedback } from '../lib/coach'
 import { sessionProblem } from '../lib/live'
 import { createPlayer, finaleSchedule, usePlayer } from '../lib/player'
+import { coachInsights, coachScore, secs, verdict, type Insight } from '../lib/score'
 import { getPrefs, setPrefs } from '../lib/store'
 import { buildTimeline } from '../lib/timeline'
-import { ROUTE_COLORS, type Session } from '../lib/types'
-import { AttemptsView } from './AttemptsView'
-import { CoachView } from './CoachView'
+import { LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session } from '../lib/types'
+import { ResultsView } from './ResultsView'
 
-type Tab = 'replay' | 'reel' | 'attempts' | 'coach'
+type Tab = 'results' | 'replay' | 'reel'
 const ALL_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'replay', label: 'Replay', icon: <Play size={14} /> },
-  { id: 'reel', label: 'Reel', icon: <Clapperboard size={14} /> },
-  { id: 'attempts', label: 'Attempts', icon: <GitCompareArrows size={14} /> },
-  { id: 'coach', label: 'Feedback', icon: <Brain size={14} /> },
+  { id: 'results', label: 'Results', icon: <BarChart3 size={15} /> },
+  { id: 'replay', label: 'Replay', icon: <Play size={15} /> },
+  { id: 'reel', label: 'Reel', icon: <Clapperboard size={15} /> },
 ]
 
-export function SessionView({ session: s, health, onUpdate, go, initialTab = 'replay' }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void; initialTab?: 'replay' | 'coach' }) {
+export function SessionView({ session: s, health, onUpdate, go, initialTab = 'replay' }: { session: Session; health: Health | null; onUpdate: (s: Session) => void; go: (h: string) => void; initialTab?: 'replay' | 'results' }) {
   const tl = useMemo(() => buildTimeline(s), [s])
   const player = useMemo(() => {
     const climbEnd = tl.climbEnd
@@ -40,21 +37,22 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
   const ps = usePlayer(player)
 
   const [tab, setTab] = useState<Tab>(initialTab)
-  // The point of the app: what to do differently next time. Always one tap away.
-  const read = useMemo(() => s.coach ?? onDeviceFeedback(s), [s])
-  // Attempts compares several climbs of one route; a single clip has nothing to compare.
-  const TABS = useMemo(() => ALL_TABS.filter((t) => (t.id !== 'attempts' || s.comparison?.attempts.length) && (t.id !== 'reel' || s.video?.src)), [s])
+  const TABS = useMemo(() => ALL_TABS.filter((t) => t.id !== 'reel' || s.video?.src), [s])
   useEffect(() => { if (tab !== 'replay') player.pause() }, [tab, player])
   const [opts, setOptsState] = useState<ViewOpts>(() => ({ skeleton: true, backdrop: Boolean(s.wall), letters: getPrefs().letters ?? false }))
   const setOpts = (o: ViewOpts) => { setOptsState(o); setPrefs({ letters: o.letters }) }
-  const [cardDismissed, setCardDismissed] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
-  const [highlight, setHighlight] = useState<number[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
   const problem = sessionProblem(s)
 
-  useEffect(() => { if (ps.t < tl.climbEnd) setCardDismissed(false) }, [ps.t, tl.climbEnd])
-  const showCard = s.toppedOut && ps.t >= tl.climbEnd + 0.35 && !cardDismissed && tab === 'replay'
+  // The score and the one-line verdict lead every view of a climb.
+  const score = useMemo(() => coachScore(s), [s])
+  const line = useMemo(() => verdict(s, coachInsights(s)), [s])
+  // A note picked in Results: the replay jumps to it and shows what to look at.
+  const [focus, setFocus] = useState<Insight | null>(null)
+  const replayRef = useRef<HTMLDivElement>(null)
+  const watch = (t: number) => { setTab('replay'); player.seek(t - 0.8); player.play(); requestAnimationFrame(() => replayRef.current?.scrollTo({ top: 0 })) }
+  const pick = (i: Insight) => { setFocus(i); if (i.time != null) watch(i.time); else setTab('replay') }
+  const done = s.toppedOut && ps.t >= tl.climbEnd
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -62,70 +60,79 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
       if (e.code === 'Space') { e.preventDefault(); player.toggle() }
       else if (e.key === 'ArrowRight') player.seek(player.get().t + (e.shiftKey ? 2 : 0.5))
       else if (e.key === 'ArrowLeft') player.seek(player.get().t - (e.shiftKey ? 2 : 0.5))
-      else if (['1', '2', '3', '4'].includes(e.key) && TABS[Number(e.key) - 1]) setTab(TABS[Number(e.key) - 1].id)
-      else if (e.key.toLowerCase() === 'e') setExportOpen(true)
+      else if (['1', '2', '3'].includes(e.key) && TABS[Number(e.key) - 1]) setTab(TABS[Number(e.key) - 1].id)
+      else if (e.key.toLowerCase() === 'e' && TABS.some((x) => x.id === 'reel')) setTab('reel')
     }
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [player, TABS])
 
   const route = ROUTE_COLORS[s.route.color] ?? ROUTE_COLORS.green
-  const seekAndShow = (t: number) => { setTab('replay'); player.seek(t) }
 
   return (
-    <motion.section className="session" style={{ ['--route' as string]: route }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35 }}>
+    <motion.section className="session" style={{ ['--route' as string]: route }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
       <div className="session-head">
-        <button className="icon-btn sh-back" onClick={() => go('#/')} aria-label="Back to climbs"><ChevronLeft size={20} /></button>
+        <button className="icon-btn sh-back" onClick={() => go('#/')} aria-label="Back to climbs"><ChevronLeft size={22} /></button>
         <div className="sh-title">
-          <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>{s.title}</motion.h1>
+          <h1>{s.title}</h1>
           <div className="sh-meta">
             <span className="chip route-chip"><span className="route-dot" />{s.route.color} · {s.route.grade}</span>
             {s.gym && <span className="chip">{s.gym}</span>}
-            <span className="chip"><span className="avatar">{s.climber.slice(0, 1)}</span>{s.climber}</span>
-            {s.kind === 'example' && <span className="chip accent">Example</span>}
+            <span className="chip">{s.climber}</span>
+            {s.kind === 'example' && <span className="chip">Example</span>}
           </div>
         </div>
         <div className="tabs" role="tablist">
           {TABS.map((t, i) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)} title={`${t.label} (${i + 1})`}>
-              {tab === t.id && <motion.span layoutId="tab-pill" className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
               <span className="tab-inner">{t.icon}{t.label}</span>
             </button>
           ))}
         </div>
         <div className="sh-actions">
           {import.meta.env.DEV && s.analysis && <button className="btn ghost" onClick={() => setDebugOpen((o) => !o)} title="Run details (development only)"><Bug size={15} /> Debug</button>}
-          <button className="btn primary" onClick={() => setExportOpen(true)} aria-label="Export"><Download size={15} /> <span className="hide-m">Export</span></button>
+          {s.video?.src && <button className="btn" onClick={() => setTab('reel')} aria-label="Export the performance reel"><Download size={16} /> <span className="hide-m">Export</span></button>}
         </div>
       </div>
       {problem && (
         <div className="banner warn"><AlertTriangle size={15} /><span>{problem}</span><a className="link" href="#/import">Re-import</a></div>
       )}
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait" initial={false}>
+        {tab === 'results' && (
+          <motion.div key="results" className="tab-body scroll" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <ResultsView session={s} tl={tl} health={health} onUpdate={onUpdate} onPick={pick} onSeek={watch} />
+          </motion.div>
+        )}
         {tab === 'replay' && (
-          <motion.div key="replay" className="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-            {!problem && (
-              <button className="coach-strip" onClick={() => setTab('coach')}>
-                <span className="cs-score">{read.score}</span>
-                <span className="cs-text"><em>{read.source === 'vlm' ? 'Coach' : 'On-device read'}</em><b>{read.headline}</b></span>
-                <span className="cs-go">Feedback <ChevronRight size={14} /></span>
+          <motion.div key="replay" ref={replayRef} className="replay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            {focus ? (
+              <div className="focus-note" role="status">
+                <span className="fn-text">
+                  <b>{focus.title}</b>
+                  {focus.tip && <span>{focus.tip}</span>}
+                  {focus.limbs?.length ? <span className="fn-limbs">{focus.limbs.map((l) => <i key={l} style={{ background: LIMB_BY_KEY[l].color }}>{LIMB_BY_KEY[l].name}</i>)}</span> : null}
+                </span>
+                <button className="icon-btn" onClick={() => setFocus(null)} aria-label="Dismiss this note"><X size={18} /></button>
+              </div>
+            ) : !problem && (
+              <button className="coach-strip" onClick={() => setTab('results')}>
+                <span className="cs-score">{score.total}</span>
+                <span className="cs-text"><em>{done ? `Topped out in ${secs(s.elapsed)}` : `Coach Score · ${score.label}`}</em><b>{line}</b></span>
+                <span className="cs-go" aria-hidden><ChevronRight size={18} /></span>
               </button>
             )}
             <div className="stage">
-              <VideoStage session={s} player={player} tl={tl} t={ps.t} showCard={showCard} onDismissCard={() => setCardDismissed(true)} />
-              <div className="route-wrap card">
+              <VideoStage session={s} player={player} tl={tl} t={ps.t} />
+              <div className="route-wrap panel">
                 <div className="panel-label">
-                  <span className="kicker">Route · {s.holdsDetected} holds</span>
-                  <span className="kicker dim">{s.holds.length && s.holds[0].score === undefined && !s.holds[0].depth ? '' : 'SAM 3.1 masks'}</span>
+                  <span className="eyebrow">Route map</span>
+                  <span className="eyebrow dim">{s.sequence.length} of {s.holdsDetected} holds used</span>
                 </div>
-                <RoutePanel session={s} tl={tl} t={ps.t} letters={opts.letters} backdrop={opts.backdrop} skeleton={opts.skeleton} highlight={highlight} onSeek={(t) => player.seek(t)} />
+                <RoutePanel session={s} tl={tl} t={ps.t} letters={opts.letters} backdrop={opts.backdrop} skeleton={opts.skeleton} highlight={focus?.holds ?? []} focusLimbs={focus?.limbs} onSeek={(t) => player.seek(t)} />
                 <div className="legend">
-                  <span><i style={{ background: 'var(--lh)' }} />left hand</span>
-                  <span><i style={{ background: 'var(--rh)' }} />right hand</span>
-                  <span><i style={{ background: 'var(--lf)' }} />left foot</span>
-                  <span><i style={{ background: 'var(--rf)' }} />right foot</span>
-                  <span><i style={{ background: '#FF5A5F', borderRadius: 99 }} />torso</span>
+                  {LIMBS.map((l) => <span key={l.key}><i style={{ background: l.color }} />{l.name}</span>)}
+                  <span><i className="body-dot" />body</span>
                 </div>
               </div>
               <LivePanel session={s} tl={tl} t={ps.t} letters={opts.letters} onSeek={(t) => player.seek(t)} />
@@ -134,23 +141,12 @@ export function SessionView({ session: s, health, onUpdate, go, initialTab = 're
           </motion.div>
         )}
         {tab === 'reel' && (
-          <motion.div key="reel" className="tab-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+          <motion.div key="reel" className="tab-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             <ReelView session={s} tl={tl} />
-          </motion.div>
-        )}
-        {tab === 'attempts' && (
-          <motion.div key="attempts" className="tab-body scroll" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-            <AttemptsView session={s} letters={opts.letters} />
-          </motion.div>
-        )}
-        {tab === 'coach' && (
-          <motion.div key="coach" className="tab-body scroll" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-            <CoachView session={s} health={health} onUpdate={onUpdate} onSeek={seekAndShow} onHighlight={setHighlight} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{exportOpen && <ExportSheet session={s} onClose={() => setExportOpen(false)} onReel={() => { setExportOpen(false); setTab('reel') }} />}</AnimatePresence>
       <AnimatePresence>{debugOpen && s.analysis && <DebugPanel session={s} onClose={() => setDebugOpen(false)} />}</AnimatePresence>
     </motion.section>
   )

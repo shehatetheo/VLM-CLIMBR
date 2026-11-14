@@ -1,10 +1,10 @@
 import { useId, useMemo, useState } from 'react'
-import { clamp, easeOut, invertAffine, pathLength, polygonPath, smoothPath } from '../lib/geometry'
+import { clamp, easeOut, invertAffine, polygonPath, smoothPath } from '../lib/geometry'
 import { holdFill } from '../lib/colors'
 import { finaleSchedule } from '../lib/player'
 import { canvasSkeletonAt } from '../lib/skeleton'
 import type { Timeline } from '../lib/timeline'
-import { GOLD, LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session, type Vec2 } from '../lib/types'
+import { GOLD, LIMBS, LIMB_BY_KEY, ROUTE_COLORS, type Session, type Vec2 , type LimbKey } from '../lib/types'
 import { useSize } from '../lib/useSize'
 
 const U = 1000
@@ -18,10 +18,12 @@ interface Props {
   skeleton?: boolean
   finale?: boolean
   highlight?: number[]
+  /** Limbs to ring, when a coach note is about them. */
+  focusLimbs?: LimbKey[]
   onSeek?: (t: number) => void
 }
 
-export function RoutePanel({ session: s, tl, t, letters = false, backdrop = false, skeleton = true, finale = true, highlight = [], onSeek }: Props) {
+export function RoutePanel({ session: s, tl, t, letters = false, backdrop = false, skeleton = true, finale = true, highlight = [], focusLimbs = [], onSeek }: Props) {
   const [ref, size] = useSize<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
   const uid = `rp${useId().replace(/:/g, '')}`
@@ -63,32 +65,63 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
   }, [s.wall, aspect])
 
   const torsoPts = useMemo(() => (s.torso ?? []).filter((p) => p[0] >= 0 && p[0] <= climbEnd), [s.torso, climbEnd])
-  const torsoMeters = useMemo(() => (s.scale ? pathLength(torsoPts.map((p) => [p[1], p[2]] as Vec2), aspect) * s.scale.metersPerUnit : 0), [torsoPts, aspect, s.scale])
 
   const finalHold = s.holds.find((h) => h.id === s.finalHoldId)
 
+  // ── badges ──
+  // The map carries one number: the order a hold was first reached. Each badge
+  // starts at its hold's top-right corner; any two that would touch are pushed
+  // apart, and a badge that ends up off its hold gets a leader line back to it.
+  const badgeR = 9.5 * px
+  const badges = useMemo(() => {
+    const items = s.sequence.map((id, order) => {
+      const h = s.holds.find((x) => x.id === id)!
+      const [cx, cy] = X(h.center)
+      const [bx, by] = X([h.bbox[0] + h.bbox[2], h.bbox[1]])
+      return { id, order, cx, cy, ax: bx, ay: by, x: bx, y: by }
+    }).filter((b) => Number.isFinite(b.x))
+    const gap = badgeR * 2 + 3 * px
+    for (let k = 0; k < 60; k++) {
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+        const A = items[i], B = items[j]
+        let dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy)
+        if (d >= gap) continue
+        if (d < 1e-6) { dx = 1; dy = (j % 2 ? 1 : -1) * 0.5; d = Math.hypot(dx, dy) }
+        const push = (gap - d) / 2
+        A.x -= (dx / d) * push; A.y -= (dy / d) * push
+        B.x += (dx / d) * push; B.y += (dy / d) * push
+      }
+      for (const b of items) {
+        b.x += (b.ax - b.x) * 0.04; b.y += (b.ay - b.y) * 0.04 // stay near the hold
+        b.x = Math.max(view.x0 + badgeR + 2 * px, Math.min(view.x0 + view.w - badgeR - 2 * px, b.x))
+        b.y = Math.max(view.y0 + badgeR + 2 * px, Math.min(view.y0 + view.h - badgeR - 2 * px, b.y))
+      }
+    }
+    return items
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s, view, px])
+
   // ── holds ──
+  const reached = (id: number) => {
+    const i = s.sequence.indexOf(id)
+    if (i < 0) return false
+    return inFinale ? t >= sched.firstAt + i * sched.step : lit.has(id)
+  }
   const holdEls = s.holds.map((h) => {
     const d = polygonPath(h.polygon, X)
     const isLit = lit.has(h.id)
     const isFinal = h.id === s.finalHoldId
-    const label = tl.label(h.id, letters)
-    const [lx, ly] = X([h.bbox[0], h.bbox[1]])
     const hi = highlight.includes(h.id) || hover === h.id
-    let fill = 'transparent', fillOpacity = 0, stroke = 'rgba(255,255,255,0.28)', strokeW = 1.4 * px, flashKey: string | null = null
-    let badge: 'route' | 'order' | 'none' = 'none'
-    let orderIdx = -1
+    let fill = 'transparent', fillOpacity = 0, stroke = 'rgba(255,255,255,0.32)', strokeW = 1.4 * px, flashKey: string | null = null
     if (inFinale) {
-      orderIdx = s.sequence.indexOf(h.id)
+      const orderIdx = s.sequence.indexOf(h.id)
       if (orderIdx >= 0) {
-        const at = sched.firstAt + orderIdx * sched.step
-        if (t >= at) {
+        if (reached(h.id)) {
           fill = holdFill(s, h.id)
           fillOpacity = 0.9
           stroke = isFinal ? GOLD : 'rgba(255,255,255,0.7)'
-          strokeW = (isFinal ? 3.2 : 1.4) * px
+          strokeW = (isFinal ? 3 : 1.4) * px
           flashKey = `f-${h.id}`
-          badge = 'order'
         } else {
           const k = clamp((t - sched.dimAt) / 0.4)
           fill = route
@@ -101,33 +134,25 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
       fillOpacity = 0.86
       stroke = done && isFinal ? '#fff3c4' : 'rgba(255,255,255,0.0)'
       flashKey = `l-${h.id}`
-      badge = 'route'
     }
-    if (hi) { stroke = '#ffffff'; strokeW = 2.4 * px }
-    const glow = fillOpacity > 0.5 ? `url(#${uid}-glow)` : undefined
+    if (hi) { stroke = '#ffffff'; strokeW = 2.6 * px }
     return (
-      <g key={h.id} className="hold" onMouseEnter={() => setHover(h.id)} onMouseLeave={() => setHover(null)} onClick={() => { const f = tl.firstUse.get(h.id); if (f && onSeek) onSeek(f.time) }}>
-        <path d={d} fill={fill} fillOpacity={fillOpacity} stroke={stroke} strokeWidth={strokeW} filter={glow} style={{ transition: 'fill-opacity .25s, stroke .25s' }} />
-        {flashKey && <path key={flashKey} d={d} className="hold-flash" fill="none" stroke={badge === 'order' ? holdFill(s, h.id) : route} strokeWidth={5 * px} style={{ transformOrigin: `${X(h.center)[0]}px ${X(h.center)[1]}px` }} />}
-        {badge === 'route' && (
-          <g transform={`translate(${lx - 4 * px},${ly - 6 * px})`}>
-            <rect x={-fs * 0.95} y={-fs * 1.25} width={fs * (label.length > 1 ? 1.75 : 1.3)} height={fs * 1.3} rx={2 * px} fill={done && isFinal ? GOLD : route} />
-            <text x={-fs * 0.95 + (fs * (label.length > 1 ? 1.75 : 1.3)) / 2} y={-fs * 0.22} fontSize={fs} textAnchor="middle" className="hold-label dark">{label}</text>
-          </g>
-        )}
-        {badge === 'none' && !inFinale && (
-          <text x={lx - 2 * px} y={ly - 5 * px} fontSize={fs * 0.95} textAnchor="end" className="hold-label dim">{label}</text>
-        )}
-        {badge === 'order' && (() => {
-          const [bx, by] = X([h.bbox[0] + h.bbox[2], h.bbox[1]])
-          return (
-            <g className="pop-in" style={{ transformOrigin: `${bx}px ${by}px` }}>
-              <circle cx={bx} cy={by} r={fs * 0.95} fill={isFinal ? GOLD : '#fff'} />
-              <text x={bx} y={by + fs * 0.36} fontSize={fs * 1.02} textAnchor="middle" className="hold-label dark">{orderIdx + 1}</text>
-              <text x={X(h.center)[0]} y={X(h.center)[1] + fs * 0.36} fontSize={fs * 0.95} textAnchor="middle" className="hold-label onfill">{label}</text>
-            </g>
-          )
-        })()}
+      <g key={h.id} className="hold" onMouseEnter={() => setHover(h.id)} onMouseLeave={() => setHover(null)} onClick={() => { setHover(h.id); const f = tl.firstUse.get(h.id); if (f && onSeek) onSeek(f.time) }}>
+        <path d={d} fill={fill} fillOpacity={fillOpacity} stroke={stroke} strokeWidth={strokeW} style={{ transition: 'fill-opacity .25s, stroke .25s' }} />
+        {/* a wider, invisible outline, so a small hold is still easy to tap */}
+        <path d={d} fill="transparent" stroke="transparent" strokeWidth={22 * px} />
+        {flashKey && <path key={flashKey} d={d} className="hold-flash" fill="none" stroke={inFinale ? holdFill(s, h.id) : route} strokeWidth={4 * px} style={{ transformOrigin: `${X(h.center)[0]}px ${X(h.center)[1]}px` }} />}
+      </g>
+    )
+  })
+  const badgeEls = badges.filter((b) => reached(b.id)).map((b) => {
+    const isFinal = b.id === s.finalHoldId && s.toppedOut
+    const off = Math.hypot(b.x - b.ax, b.y - b.ay) > badgeR * 0.9
+    return (
+      <g key={b.id} className="badge" pointerEvents="none">
+        {off && <line x1={b.cx} y1={b.cy} x2={b.x} y2={b.y} stroke="#fff" strokeOpacity={0.7} strokeWidth={1.2 * px} />}
+        <circle cx={b.x} cy={b.y} r={badgeR} fill={isFinal ? GOLD : '#fff'} stroke="#0b0c0e" strokeWidth={1.5 * px} />
+        <text x={b.x} y={b.y + fs * 0.36} fontSize={fs * 1.02} textAnchor="middle" className="hold-label dark">{b.order + 1}</text>
       </g>
     )
   })
@@ -202,7 +227,7 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
           {s.scale && (
             <g opacity={0.5}>
               <line x1={view.x0} x2={view.x0 + view.w} y1={view.floorY} y2={view.floorY} stroke="rgba(255,255,255,0.18)" strokeWidth={px} strokeDasharray={`${4 * px} ${6 * px}`} />
-              <text x={view.x0 + 14 * px} y={view.floorY - 6 * px} fontSize={fs * 0.8} className="hold-label dim">FLOOR</text>
+              <text x={view.x0 + 14 * px} y={view.floorY - 6 * px} fontSize={fs * 0.8} className="hold-label dim">Floor</text>
             </g>
           )}
 
@@ -271,14 +296,13 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
             <g>
               {trail.slice(1).map((p, i) => {
                 const a = X(trail[i]), b = X(p)
-                return <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#FF5A5F" strokeOpacity={(i / trail.length) * 0.8} strokeWidth={2.4 * px} strokeLinecap="round" />
+                return <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#E8EAED" strokeOpacity={(i / trail.length) * 0.8} strokeWidth={2.4 * px} strokeLinecap="round" />
               })}
             </g>
           )}
           {showClimber && torso && (
             <g>
-              <circle cx={X(torso)[0]} cy={X(torso)[1]} r={11 * px} fill="#FF5A5F" opacity={0.35} filter={`url(#${uid}-soft)`} />
-              <circle cx={X(torso)[0]} cy={X(torso)[1]} r={5 * px} fill="#FF5A5F" stroke="#fff" strokeWidth={1.4 * px} />
+              <circle cx={X(torso)[0]} cy={X(torso)[1]} r={5 * px} fill="#E8EAED" stroke="#0b0c0e" strokeWidth={1.4 * px} />
             </g>
           )}
 
@@ -287,14 +311,16 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
             const [x, y] = X(st.pos)
             return (
               <g key={l.key}>
-                {st.moving && <circle cx={x} cy={y} r={11 * px} fill={l.color} opacity={0.25} filter={`url(#${uid}-soft)`} />}
+                {focusLimbs.includes(l.key) && <circle cx={x} cy={y} r={11 * px} fill="none" stroke="#fff" strokeWidth={2 * px} />}
                 <circle cx={x} cy={y} r={(st.moving ? 5.4 : 4.6) * px} fill={l.color} stroke="#0a0b0d" strokeWidth={1.4 * px} />
               </g>
             )
           })}
 
+          {badgeEls}
+
           {/* the climb, measured */}
-          {inFinale && meters && measure > 0 && (() => {
+          {inFinale && meters && measure > 0 && size.width >= 480 && (() => {
             const ease = easeOut(measure)
             const [fx] = X([meters.fx, 0])
             const [farX] = X([meters.farX, 0])
@@ -306,6 +332,7 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
             // What the panel really shows: the view box, plus the side room a wider panel leaves.
             const half = Math.max(view.w, (size.width || 0) * px) / 2 - 6 * px
             const span: [number, number] = [view.x0 + view.w / 2 - half, view.x0 + view.w / 2 + half]
+            const ySpan: [number, number] = [view.y0 + 4 * px, view.y0 + view.h - 4 * px]
             return (
               <g className="measure">
                 <line x1={vx} y1={floorY} x2={vx} y2={y2} stroke="#E6E1D9" strokeWidth={2 * px} strokeDasharray={`${7 * px} ${5 * px}`} />
@@ -316,16 +343,9 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
                 <g opacity={clamp((measure - 0.5) * 2)}>
                   {/* Labels sit outside the dimension line, away from the climb. */}
                   {vx < fx
-                    ? <MeterTag span={span} x={vx - 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent right />
-                    : <MeterTag span={span} x={vx + 12 * px} y={(floorY + topY) / 2} px={px} text={`${meters.height.toFixed(2)} m off the ground`} accent />}
-                  <MeterTag span={span} x={(farX + vx) / 2} y={floorY + 22 * px} px={px} text={`${meters.across.toFixed(2)} m across`} center />
-                  {torsoMeters > 0 && torsoPts.length > 4 && (() => {
-                    const mid = torsoPts[Math.floor(torsoPts.length * 0.42)]
-                    const [mx, my] = X([mid[1], mid[2]])
-                    return vx < fx
-                      ? <MeterTag span={span} x={mx + 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} />
-                      : <MeterTag span={span} x={mx - 18 * px} y={my} px={px} text={`${torsoMeters.toFixed(2)} m torso traveled`} right />
-                  })()}
+                    ? <MeterTag span={span} ySpan={ySpan} x={vx - 12 * px} y={(floorY + topY) / 2} px={px} text={`Route height ${meters.height.toFixed(1)} m`} right />
+                    : <MeterTag span={span} ySpan={ySpan} x={vx + 12 * px} y={(floorY + topY) / 2} px={px} text={`Route height ${meters.height.toFixed(1)} m`} />}
+                  <MeterTag span={span} ySpan={ySpan} x={(farX + vx) / 2} y={floorY + 22 * px} px={px} text={`Route width ${meters.across.toFixed(1)} m`} center />
                 </g>
               </g>
             )
@@ -336,12 +356,9 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
         <div className="hold-tip">
           <strong>Hold {tl.label(hoverHold.id, letters)}</strong>
           {hoverUse ? (
-            <span>
-              #{s.sequence.indexOf(hoverHold.id) + 1} · first used {hoverUse.time.toFixed(2)} s by {LIMB_BY_KEY[hoverUse.limb].name}
-              <em>{(tl.holdLimbs.get(hoverHold.id) ?? []).map((k) => LIMB_BY_KEY[k].label).join(' + ')}</em>
-            </span>
+            <span>Move {s.sequence.indexOf(hoverHold.id) + 1} · first reached at {hoverUse.time.toFixed(1)}s by your {LIMB_BY_KEY[hoverUse.limb].name}</span>
           ) : (
-            <span>not used{hoverHold.score ? ` · SAM score ${hoverHold.score.toFixed(2)}` : ''}</span>
+            <span>Not used on this climb</span>
           )}
         </div>
       )}
@@ -349,11 +366,12 @@ export function RoutePanel({ session: s, tl, t, letters = false, backdrop = fals
   )
 }
 
-function MeterTag({ x, y, px, text, accent, center, right, span }: { x: number; y: number; px: number; text: string; accent?: boolean; center?: boolean; right?: boolean; span?: [number, number] }) {
+function MeterTag({ x, y: y0, px, text, accent, center, right, span, ySpan }: { x: number; y: number; px: number; text: string; accent?: boolean; center?: boolean; right?: boolean; span?: [number, number]; ySpan?: [number, number] }) {
   const fs = 13 * px
   const w = text.length * fs * 0.56 + 14 * px
   let left = center ? x - w / 2 : right ? x - w : x
   if (span) left = Math.max(span[0], Math.min(left, span[1] - w)) // a narrow panel must not cut a label off
+  const y = ySpan ? Math.max(ySpan[0] + fs, Math.min(y0, ySpan[1] - fs * 0.8)) : y0
   return (
     <g>
       <rect x={left} y={y - fs * 0.95} width={w} height={fs * 1.6} rx={4 * px} fill="rgba(10,11,13,0.82)" stroke="rgba(255,255,255,0.12)" strokeWidth={px} />

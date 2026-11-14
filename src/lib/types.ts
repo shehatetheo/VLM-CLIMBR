@@ -17,10 +17,10 @@ export interface LimbInfo {
 
 // Panel order: hands above feet, left before right — the pipeline's LIMBS.
 export const LIMBS: LimbInfo[] = [
-  { key: 'left_hand', label: 'LH', name: 'left hand', color: '#22D3EE', hand: true, side: -1 },
-  { key: 'right_hand', label: 'RH', name: 'right hand', color: '#6366F1', hand: true, side: 1 },
-  { key: 'left_foot', label: 'LF', name: 'left foot', color: '#E879F9', hand: false, side: -1 },
-  { key: 'right_foot', label: 'RF', name: 'right foot', color: '#FB7185', hand: false, side: 1 },
+  { key: 'left_hand', label: 'LH', name: 'left hand', color: '#5CC8E0', hand: true, side: -1 },
+  { key: 'right_hand', label: 'RH', name: 'right hand', color: '#8189F0', hand: true, side: 1 },
+  { key: 'left_foot', label: 'LF', name: 'left foot', color: '#CF8AE6', hand: false, side: -1 },
+  { key: 'right_foot', label: 'RF', name: 'right foot', color: '#F08C9A', hand: false, side: 1 },
 ]
 export const LIMB_BY_KEY = Object.fromEntries(LIMBS.map((l) => [l.key, l])) as Record<LimbKey, LimbInfo>
 export const LIMB_BY_LABEL = Object.fromEntries(LIMBS.map((l) => [l.label, l])) as Record<string, LimbInfo>

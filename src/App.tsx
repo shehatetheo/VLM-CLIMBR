@@ -19,7 +19,7 @@ function parse(hash: string): Route {
   if (h.startsWith('import')) return { name: 'import' }
   if (h.startsWith('session/')) {
     const [id, view] = h.slice(8).split('/')
-    return { name: 'session', id: decodeURIComponent(id), feedback: view === 'feedback' }
+    return { name: 'session', id: decodeURIComponent(id), feedback: view === 'results' || view === 'feedback' }
   }
   return { name: 'home' }
 }
@@ -61,8 +61,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="bg-grid" aria-hidden />
-      <div className="bg-noise" aria-hidden />
       <AnimatePresence mode="wait">
         {route.name === 'welcome' ? (
           <Onboarding key="welcome" onDone={(to) => go(to)} />
@@ -72,9 +70,9 @@ export default function App() {
             <main className="main">
               <AnimatePresence mode="wait">
                 {route.name === 'home' && <Home key="home" sessions={Object.values(sessions)} go={go} />}
-                {route.name === 'import' && <ImportView key="import" health={health} onHealth={setHealth} onSession={(s) => { addSession(s); go(`#/session/${encodeURIComponent(s.id)}/feedback`) }} />}
+                {route.name === 'import' && <ImportView key="import" health={health} onHealth={setHealth} onSession={(s) => { addSession(s); go(`#/session/${encodeURIComponent(s.id)}/results`) }} />}
                 {route.name === 'session' && (active ? (
-                  <SessionView key={active.id} session={active} health={health} onUpdate={addSession} go={go} initialTab={route.feedback ? 'coach' : 'replay'} />
+                  <SessionView key={active.id} session={active} health={health} onUpdate={addSession} go={go} initialTab={route.feedback ? 'results' : 'replay'} />
                 ) : (
                   <motion.div key="loading" className="loading-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {error ? <p className="muted">{error}</p> : <div className="spinner" />}

@@ -4,6 +4,7 @@
 
 import { sampleFrames } from './frames'
 import { clamp } from './geometry'
+import { coachInsights, coachScore, describeHold } from './score'
 import { LIMBS, LIMB_BY_KEY, type CoachFeedback, type LimbKey, type Session } from './types'
 
 export interface Insight {
@@ -74,7 +75,7 @@ export function computeInsights(s: Session): Insight[] {
     out.push({
       id: 'longest',
       tone: top.duration > elapsed * 0.33 ? 'warn' : 'info',
-      title: `Longest grip: ${LIMB_BY_KEY[top.limb].name} on ${top.holdId}`,
+      title: `Longest hold: ${LIMB_BY_KEY[top.limb].name} on hold ${top.holdId}`,
       detail: `${top.duration.toFixed(2)} s from ${top.time.toFixed(2)} s — ${Math.round((top.duration / elapsed) * 100)}% of the climb. That limb was your anchor while the others moved.`,
       metric: `${top.duration.toFixed(1)} s`,
       time: top.time,
@@ -170,7 +171,6 @@ export function onDeviceFeedback(s: Session): CoachFeedback {
 
 /** What the VLM is told about the climb. Compact, and in the pipeline's terms. */
 export function analyticsFor(s: Session) {
-  const ins = computeInsights(s)
   return {
     route: { color: s.route.color, grade: s.route.grade, name: s.route.name, holds_detected: s.holdsDetected },
     climber: s.climber,
@@ -182,8 +182,9 @@ export function analyticsFor(s: Session) {
     on_a_hold: s.utilization ? Object.fromEntries(LIMBS.map((l) => [l.label, Math.round(s.utilization![l.key].coverage * 100) + '%'])) : undefined,
     per_limb_sequence: s.utilization ? Object.fromEntries(LIMBS.map((l) => [l.label, s.utilization![l.key].sequence])) : undefined,
     attempts: s.comparison?.attempts.map((a) => ({ label: a.isThis ? `${a.label} (this climb)` : a.label, holds: a.sequence.length, seconds: a.elapsed, sequence: a.sequence, topped_out: a.toppedOut })),
-    hold_positions: s.holds.map((h) => ({ id: h.id, x: +h.center[0].toFixed(3), y: +h.center[1].toFixed(3) })),
-    measured_insights: ins.map((i) => `${i.title}: ${i.detail}`),
+    hold_positions: s.holds.map((h) => ({ id: h.id, x: +h.center[0].toFixed(3), y: +h.center[1].toFixed(3), where: describeHold(s, h.id) })),
+    coach_score: coachScore(s),
+    measured_insights: coachInsights(s).map((i) => `${i.title} ${i.body}`),
   }
 }
 

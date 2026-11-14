@@ -18,12 +18,11 @@ export function LivePanel({ session: s, tl, t, letters, onSeek }: { session: Ses
         <div className="clock-top">
           <span className="kicker">{done ? 'Topped out' : started ? 'On the wall' : 'Pulling on'}</span>
           <span className={`state-pill ${done ? 'done' : started ? 'live' : ''}`}>
-            <span className="dot" /> {done ? 'SENT' : started ? 'CLIMBING' : 'READY'}
+            <span className="dot" /> {done ? 'Sent' : started ? 'Climbing' : 'Ready'}
           </span>
         </div>
         <div className="clock">
-          <span className="clock-num">{clock.toFixed(2).padStart(5, '0')}</span>
-          <span className="clock-unit">s</span>
+          <span className="clock-num">{clock.toFixed(2)}s</span>
         </div>
         <div className="clock-bar">
           <motion.div className="clock-fill" style={{ width: `${(T / Math.max(0.01, tl.climbEnd)) * 100}%`, background: done ? GOLD : route }} />
@@ -37,8 +36,8 @@ export function LivePanel({ session: s, tl, t, letters, onSeek }: { session: Ses
 
       <div className="card">
         <div className="limb-head">
-          <span className="kicker">On a hold</span>
-          <span className="kicker">Holds used, in order</span>
+          <span className="kicker">Time on holds</span>
+          <span className="kicker">Which holds each limb used</span>
         </div>
         {LIMBS.map((l) => {
           const cov = tl.coverageAt(l.key, T)
@@ -65,15 +64,15 @@ export function LivePanel({ session: s, tl, t, letters, onSeek }: { session: Ses
       </div>
 
       <div className="card">
-        <div className="limb-head"><span className="kicker">Sequence</span><span className="kicker dim">{lit.length} of {s.sequence.length}</span></div>
+        <div className="limb-head"><span className="kicker">Move order</span><span className="kicker dim">{lit.length} of {s.sequence.length} holds reached</span></div>
         <div className="route-seq">
           {s.sequence.map((id, i) => {
             const on = lit.includes(id)
             const first = tl.firstUse.get(id)
             const color = id === s.finalHoldId && done ? GOLD : first ? LIMB_BY_KEY[first.limb].color : '#fff'
             return (
-              <button key={id} className={`rs-chip ${on ? 'on' : ''}`} style={on ? { color, borderColor: color, boxShadow: `0 0 18px -6px ${color}` } : undefined} onClick={() => first && onSeek(first.time)}>
-                <i>{i + 1}</i>{L(id)}
+              <button key={id} className={`rs-chip ${on ? 'on' : ''}`} style={on ? { color, borderColor: color } : undefined} onClick={() => first && onSeek(first.time)}>
+                <i>Move {i + 1}</i>Hold {L(id)}
               </button>
             )
           })}
@@ -90,7 +89,7 @@ export function LivePanel({ session: s, tl, t, letters, onSeek }: { session: Ses
               return (
                 <motion.button key={`${m.limb}-${m.holdId}-${m.time}`} layout className="feed-item" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ type: 'spring', stiffness: 500, damping: 36 }} onClick={() => onSeek(m.time)}>
                   <span className="feed-limb" style={{ background: l.color }}>{l.label}</span>
-                  <span className="feed-text">{l.name} → <b>{L(m.holdId)}</b></span>
+                  <span className="feed-text">{l.name} → <b>hold {L(m.holdId)}</b></span>
                   <span className="feed-t">{m.time.toFixed(2)}s</span>
                 </motion.button>
               )
