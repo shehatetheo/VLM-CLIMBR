@@ -65,8 +65,9 @@ export interface SourceMeta extends ClipMeta {
 export interface AnalyzeResult {
   type: 'result'
   id: string
-  color: string
+  color: string // the route color the holds were read for: the one picked, unless the climber was plainly on another
   prompt: string
+  colorCheck?: { asked: string; used?: string; tracks: number; touches: { count: number; holds: number }; guesses: { color: string; share: number; lift: number }[]; tried: { color: string; tracks: number; touches: { count: number; holds: number } }[] } | null
   source: SourceMeta
   analysis: ClipMeta
   playback: ClipMeta & { src: string; webm: string | null; poster: string }

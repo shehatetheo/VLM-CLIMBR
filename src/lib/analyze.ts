@@ -37,6 +37,8 @@ export const CFG = {
   KEYPOINT_MIN_CONFIDENCE: 0,
   BOX_MIN_CONFIDENCE: 0.3, // joints that outline a person when the box is missing
   POSE_GAP_SECONDS: 0.35, // longer than this without the climber: every limb lets go
+  TRACK_JOIN_GAP: 3, // seconds: a climber lost this long and picked up nearby under a new id is still them
+  HANDS_FIRST_SECONDS: 3, // hands on 2+ route holds this long before both feet are: the climb started with the hands
   NUMBER_BAND: 0.025, // frame heights: holds this close in height are one row
   START_DWELL_DECAY: 1, // frames the start counter loses per frame off: leaky, not a reset
   FINAL_DWELL_DECAY: 0,
@@ -289,7 +291,8 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
   const order = [...people.keys()].sort((a, b) => evidence.get(b)! - evidence.get(a)!)
   const chain = [order[0]]
   // A person tracker can lose the climber and pick them up under a new id: join
-  // a track on the wall that starts within a second of where theirs stopped.
+  // a track on the wall that starts within a few seconds of where theirs
+  // stopped, near where they were (further allowed the longer the gap).
   for (let grew = true; grew;) {
     grew = false
     const all = chain.flatMap((id) => people.get(id)!)
@@ -299,12 +302,13 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
       if (chain.includes(id)) continue
       const list = people.get(id)!
       const head = list[0], tail = list[list.length - 1]
-      const after = head.timestamp > last.timestamp && head.timestamp - last.timestamp <= 1
-      const before = tail.timestamp < first.timestamp && first.timestamp - tail.timestamp <= 1
+      const after = head.timestamp > last.timestamp && head.timestamp - last.timestamp <= CFG.TRACK_JOIN_GAP
+      const before = tail.timestamp < first.timestamp && first.timestamp - tail.timestamp <= CFG.TRACK_JOIN_GAP
       if (!after && !before) continue
       const ba = after ? boxOf(last) : boxOf(tail), bb = after ? boxOf(head) : boxOf(first)
       if (!ba || !bb || evidence.get(id)! < 1) continue
-      if (Math.hypot(ba[0] + ba[2] / 2 - (bb[0] + bb[2] / 2), ba[1] + ba[3] / 2 - (bb[1] + bb[3] / 2)) > 0.3) continue
+      const gap = after ? head.timestamp - last.timestamp : first.timestamp - tail.timestamp
+      if (Math.hypot(ba[0] + ba[2] / 2 - (bb[0] + bb[2] / 2), ba[1] + ba[3] / 2 - (bb[1] + bb[3] / 2)) > Math.min(0.5, 0.3 + 0.08 * gap)) continue
       chain.push(id)
       grew = true
       break
@@ -464,6 +468,19 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
     } else {
       startT = T[0]
       startSource = 'none'
+    }
+  }
+  // Feet off the route: on some problems the feet use volumes and the wall
+  // itself, and never stand on two route holds together until late. When the
+  // hands were already moving between route holds well before that, the
+  // climb started with them.
+  if (startSource === 'both feet on holds' && startT != null) {
+    const feet = startT
+    const early = contacts.filter((c) => (c.limb === 'left_hand' || c.limb === 'right_hand') && c.start < feet - CFG.HANDS_FIRST_SECONDS)
+    if (new Set(early.map((c) => c.holdId)).size >= 2) {
+      startT = Math.min(...early.map((c) => c.start))
+      startSource = 'first contact'
+      warnings.push('The climb clock starts at the first hand hold: the feet were off the route holds until late in the climb.')
     }
   }
   if (completion == null) warnings.push('No top-out detected: both hands never held the top hold together.')

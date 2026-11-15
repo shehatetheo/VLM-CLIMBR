@@ -90,6 +90,8 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
     try {
       const r = await analyzeLive(clip.file, { color, health }, onEvent, (p) => stage('uploading', { progress: p, detail: `${Math.round(p * 100)}% of ${fmtBytes(clip.size)}` }), ctl.signal)
       patch((x) => ({ ...x, debug: r.debug }))
+      // The server reads the color the climber was actually on, if it was plainly not the one picked.
+      const routeColor = r.color || color
 
       // ── analyzing_moves: the route reader, then every number checked ──
       current = 'analyzing_moves'
@@ -97,20 +99,20 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       await new Promise((res) => setTimeout(res, 50))
       let reading: Reading
       try {
-        reading = readRoute({ sam: r.sam, pose: r.pose, frame: { width: r.analysis.width, height: r.analysis.height, duration: r.analysis.duration }, color })
+        reading = readRoute({ sam: r.sam, pose: r.pose, frame: { width: r.analysis.width, height: r.analysis.height, duration: r.analysis.duration }, color: routeColor })
       } catch (e) {
         throw new StageError((e as Error).message, 'analyzing_moves')
       }
       if (reading.outcome !== 'ok') {
         const why = reading.outcome === 'no-holds'
-          ? `We could not find any ${color} holds in this clip. Check the route color you picked, film close enough that the holds are easy to see, and avoid dim or strongly colored lighting.`
-          : `We found the ${color} holds but could not see a climber on them. Keep your whole body in the frame, and film from behind or from the side.`
-        stage('analyzing_moves', { status: 'done', detail: reading.outcome === 'no-holds' ? `0 ${color} holds` : 'no climber' })
+          ? `We could not find any ${routeColor} holds in this clip. Check the route color you picked, film close enough that the holds are easy to see, and avoid dim or strongly colored lighting.`
+          : `We found the ${routeColor} holds but could not see a climber on them. Keep your whole body in the frame, and film from behind or from the side.`
+        stage('analyzing_moves', { status: 'done', detail: reading.outcome === 'no-holds' ? `0 ${routeColor} holds` : 'no climber' })
         reportRun(r.id, { status: 'empty', outcome: reading.outcome, summary: reading.stats, warnings: reading.warnings })
         patch((x) => ({ ...x, phase: 'empty', empty: why, finished: Date.now() }))
         return
       }
-      const s = sessionFromLive(r, reading, { title, climber: getPrefs().username ?? climber, color, grade }, await keepMedia(r.playback, health))
+      const s = sessionFromLive(r, reading, { title, climber: getPrefs().username ?? climber, color: routeColor, grade }, await keepMedia(r.playback, health))
       const bad = failedChecks(s.analysis!.validation)
       reportRun(r.id, { status: bad.length ? 'invalid' : 'valid', summary: reading.stats, validation: s.analysis!.validation, warnings: s.analysis!.warnings, session: { duration: s.duration, offset: s.video!.offset, canvas: s.canvas, holds: s.holds.length, moves: s.moves.length, sequence: s.sequence, elapsed: s.elapsed } })
       if (bad.length) throw Object.assign(new StageError(`The result failed ${bad.length} check${bad.length > 1 ? 's' : ''}, so it was not opened.`, 'analyzing_moves'), { checks: bad })
@@ -135,6 +137,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       patch((x) => ({ ...x, phase: 'complete', finished: Date.now() }))
       await new Promise((res) => setTimeout(res, 900))
       setRun(null)
+      if (routeColor !== color) toast(`Read as a ${routeColor} route: you picked ${color}, but your hands and feet were on ${routeColor} holds.`)
       onSession(s)
     } catch (e) {
       if ((e as Error).name === 'AbortError') { setRun(null); return }

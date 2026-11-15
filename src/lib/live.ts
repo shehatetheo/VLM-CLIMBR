@@ -113,9 +113,13 @@ export function validateLive(s: Session, r: AnalyzeResult, reading: Reading): Ch
   add('sam-coverage', 'SAM 3.1 sampled the whole clip', r.sam.samples.length > 0 && r.sam.samples[0].t <= step && samLast >= A.duration - 1.5 * step - 1e-6,
     `${r.sam.samples.length} frames from ${r.sam.samples[0]?.t.toFixed(2) ?? '—'} to ${samLast.toFixed(2)} s, one every ${step.toFixed(2)} s`)
   add('sam-holds', 'SAM 3.1 found holds', r.sam.tracks > 0, `${r.sam.tracks} tracks, ${r.sam.detections.length} masks`)
+  // Frames with nobody in them are not posed, and from far away a climber can
+  // drop out for a moment. Most of the clip unposed means the model failed;
+  // a few gaps only cost those seconds, so they warn instead of stopping.
   const posed = r.pose.framesPosed
-  add('pose-coverage', 'ViTPose+ posed the whole clip', posed >= 0.9 * A.frameCount,
-    `${posed} of ${A.frameCount} frames${r.pose.frames.length ? `, ${r.pose.frames[0].timestamp.toFixed(2)}–${r.pose.frames[r.pose.frames.length - 1].timestamp.toFixed(2)} s` : ''}`)
+  const posedSpan = `${posed} of ${A.frameCount} frames${r.pose.frames.length ? `, ${r.pose.frames[0].timestamp.toFixed(2)}–${r.pose.frames[r.pose.frames.length - 1].timestamp.toFixed(2)} s` : ''}`
+  add('pose-coverage', 'ViTPose+ posed most of the clip', posed >= 0.4 * A.frameCount, posedSpan)
+  add('pose-gaps', 'ViTPose+ saw the climber in nearly every frame', posed >= 0.9 * A.frameCount, posedSpan, 'warn')
   add('climber', 'Climber tracked', reading.stats.climberFrames > 0,
     `${reading.stats.climberFrames} frames${reading.stats.climberSpan ? `, ${reading.stats.climberSpan[0].toFixed(2)}–${reading.stats.climberSpan[1].toFixed(2)} s` : ''} of ${reading.stats.people} ${reading.stats.people === 1 ? 'person' : 'people'}`)
   add('camera', reading.stats.camera === 'still' ? 'Camera still' : 'Camera motion registered', reading.stats.registeredSamples > 0 && (reading.stats.camera === 'still' || reading.stats.registeredFraction >= 0.5),

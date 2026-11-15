@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { coachPrompt, COACH_SYSTEM } from './coach.mjs'
+import { guessColors, touchScore } from './routecolor.mjs'
 import { normalizePose, normalizeSam } from './vlm.mjs'
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -441,17 +442,22 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
     stage('estimating_pose', 'running', { detail: `ViTPose+ · ${A.frameCount} frames at ${ANALYSIS_FPS} fps` })
     const expect = { width: A.width, height: A.height, fps: ANALYSIS_FPS, frameCount: A.frameCount, duration: A.duration }
 
-    const segment = chat({
+    // One SAM 3.1 tracking pass for a prompt; reused when the route color is re-checked.
+    const track = (p, tag = '') => chat({
       model: HOLD_MODEL,
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'video_url', video_url: { url: videoUrl } }] }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: p }, { type: 'video_url', video_url: { url: videoUrl } }] }],
       response_format: { type: 'json_object' },
       method: 'track',
-      method_params: { prompt, video_skip_frames: skip, video_max_frames: TRACK_MAX_FRAMES, polygons: true, mask_format: 'png' },
+      method_params: { prompt: p, video_skip_frames: skip, video_max_frames: TRACK_MAX_FRAMES, polygons: true, mask_format: 'png' },
     }, { timeoutMs, signal }).then((r) => {
       const raw = stripMasks(parseJsonContent(r.content))
-      if (DEBUG) writeJson(path.join(dir, 'sam.raw.json'), raw)
+      if (DEBUG) writeJson(path.join(dir, `sam${tag}.raw.json`), raw)
       const sam = normalizeSam(raw, expect)
-      if (DEBUG) writeJson(path.join(dir, 'sam.json'), sam)
+      if (DEBUG) writeJson(path.join(dir, `sam${tag}.json`), sam)
+      return { sam, usage: r.usage }
+    })
+    const segment = track(prompt).then(({ sam, usage }) => {
+      const r = { usage }
       log('SAM 3.1', JSON.stringify({ envelope: sam.envelope, coords: sam.coords, samples: sam.samples.length, tracks: sam.tracks, detections: sam.detections.length, dropped: sam.dropped, checks: sam.checks.filter((c) => !c.ok) }))
       run.sam = { samples: sam.samples.length, tracks: sam.tracks, detections: sam.detections.length, coords: sam.coords, checks: sam.checks, usage: r.usage }
       stage('segmenting', 'done', { detail: `${sam.tracks} ${color} hold track${sam.tracks === 1 ? '' : 's'} · ${sam.detections.length} masks in ${sam.samples.length} frames`, data: run.sam })
@@ -485,7 +491,45 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
       if (failed.length > 1) err.message = failed.map((e) => e.message).join(' · ')
       throw err
     }
-    const { sam } = segR.value, { pose } = poseR.value
+    let { sam } = segR.value
+    const { pose } = poseR.value
+
+    // ── the route color, checked ──
+    // A clip analyzed for the wrong color finds a handful of holds the
+    // climber never touches. When that happens, look at the holds under their
+    // hands and feet, re-run SAM for the likeliest colors, and keep the color
+    // they actually touch. A prompt typed by hand is left alone.
+    let used = color, colorCheck = null
+    const mine = touchScore(sam, pose)
+    const budget = ON_VERCEL ? 150_000 : 10 * 60_000
+    if (!promptIn && (sam.tracks < 5 || mine.holds < 2) && Date.now() - t0 < budget) {
+      const guesses = guessColors(FFMPEG, media.files.analysis, pose, A).filter((g) => g.color !== color && g.share >= 0.12)
+      log('route color', JSON.stringify({ asked: color, tracks: sam.tracks, touches: mine, guesses }))
+      colorCheck = { asked: color, tracks: sam.tracks, touches: mine, guesses: guesses.slice(0, 4), tried: [] }
+      const tryColors = guesses.slice(0, 2).map((g) => g.color)
+      if (tryColors.length) {
+        stage('segmenting', 'running', { detail: `Only ${sam.tracks} ${color} hold${sam.tracks === 1 ? '' : 's'}, and few touches. Checking ${tryColors.join(' and ')}…` })
+        const alts = await Promise.allSettled(tryColors.map((c, i) => track(`${c} climbing hold`, `.${i + 1}`).then((x) => ({ color: c, ...x, touches: touchScore(x.sam, pose) }))))
+        const ok = alts.filter((a) => a.status === 'fulfilled').map((a) => a.value)
+        colorCheck.tried = ok.map((a) => ({ color: a.color, tracks: a.sam.tracks, touches: a.touches }))
+        // Most touches wins (red and pink holds can both match a red route); the
+        // color under the hands breaks near-ties.
+        const prior = Object.fromEntries(guesses.map((g) => [g.color, g.score]))
+        const rank = (x) => (x.touches.count + 4 * x.touches.holds) * (1 + 0.25 * Math.min(2, prior[x.color] ?? 0))
+        const best = ok.sort((a, b) => rank(b) - rank(a))[0]
+        if (best && best.touches.holds >= 2 && best.touches.holds > mine.holds && best.touches.count > mine.count * 1.5) {
+          sam = best.sam
+          used = best.color
+          colorCheck.used = used
+          run.sam = { ...run.sam, samples: sam.samples.length, tracks: sam.tracks, detections: sam.detections.length, color: used }
+        }
+        stage('segmenting', 'done', {
+          detail: used !== color
+            ? `Read as a ${used} route: your hands and feet were on ${used} holds, not ${color} · ${sam.tracks} ${used} hold tracks`
+            : `${sam.tracks} ${color} hold track${sam.tracks === 1 ? '' : 's'} · no better color found`,
+        })
+      }
+    }
     const warnings = [...sam.warnings, ...pose.warnings,
       ...[...sam.checks, ...pose.checks].filter((c) => !c.ok).map((c) => `Gateway ${c.name} mismatch: ${c.detail}.`)]
     run.warnings = warnings
@@ -499,8 +543,9 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
     const result = {
       type: 'result',
       id,
-      color,
-      prompt,
+      color: used,
+      prompt: used === color ? prompt : `${used} climbing hold`,
+      colorCheck,
       source: src,
       analysis: A,
       playback: { ...media.playback, src: urls.playback, webm: urls.webm ?? null, poster: urls.poster },
