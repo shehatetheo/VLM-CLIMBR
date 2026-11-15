@@ -107,7 +107,7 @@ export function MyClimbsView({ examples, go }: { examples: Session[]; go: (h: st
                 <button className="row" onClick={() => { setMenu(null); go(menu.open) }}><Play size={20} /><span className="grow"><b>open</b></span></button>
                 {menu.cloud && (menu.cloud.visibility === 'public'
                   ? <button className="row" onClick={() => share(menu, 'private')}><Lock size={20} /><span className="grow"><b>make private</b><span>take it out of the feed</span></span></button>
-                  : <button className="row" onClick={() => share(menu, 'public')}><Globe size={20} /><span className="grow"><b>share to the feed</b><span>we check every climb before it shows up</span></span></button>)}
+                  : <button className="row" onClick={() => share(menu, 'public')}><Globe size={20} /><span className="grow"><b>share to the feed</b><span>everyone can watch it and give props</span></span></button>)}
                 <button className="row danger" onClick={() => remove(menu)}><Trash2 size={20} /><span className="grow"><b>delete</b><span>this cannot be undone</span></span></button>
               </div>
             </motion.div>
