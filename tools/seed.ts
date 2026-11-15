@@ -7,18 +7,21 @@
 // It signs in as a fresh anonymous user (the "official CLIMBR account"), uploads
 // each example's clip and poster, saves the analysis, then asks the database,
 // with the moderation secret, to mark the climb as an approved example.
-// Running it again replaces the examples.
+// Running it again replaces the examples. An example is either the pipeline's
+// files (climbr.json, climb.json, ...) or one saved session.json, like Oliver's.
+// The feed shows the newest first, so the last one here leads.
 import { createClient } from '@supabase/supabase-js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { buildSession, type SessionParts } from '../src/lib/session'
+import type { Session } from '../src/lib/types'
 import { bestMove, coachInsights, coachScore } from '../src/lib/score'
 import { climbStatus } from '../src/lib/status'
 
 const url = process.env.VITE_SUPABASE_URL, key = process.env.VITE_SUPABASE_ANON_KEY, secret = process.env.ADMIN_RPC_SECRET
 if (!url || !key || !secret) { console.error('Set VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY and ADMIN_RPC_SECRET.'); process.exit(1) }
 const sb = createClient(url, key, { auth: { persistSession: false } })
-const EXAMPLES = ['green-vb']
+const EXAMPLES = ['green-vb', 'oliver']
 
 const { data: auth, error: authError } = await sb.auth.signInAnonymously()
 if (authError || !auth.user) { console.error('Anonymous sign-in failed. Enable it under Authentication → Sign In / Providers.', authError?.message); process.exit(1) }
@@ -29,10 +32,15 @@ await sb.from('profiles').upsert({ id: uid, username: `Climbr${Math.floor(1000 +
 for (const id of EXAMPLES) {
   const dir = path.join('public', 'examples', id)
   const read = (f: string) => (fs.existsSync(path.join(dir, f)) ? JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) : undefined)
-  const manifest = read('climbr.json'), files = manifest?.files ?? {}
-  const coach = read('coach.json')
-  const parts: SessionParts = { manifest: coach ? { ...manifest, coach } : manifest, climb: read(files.climb ?? 'climb.json'), sequence: read(files.sequence ?? 'sequence.json'), holds: read(files.holds ?? 'holds.json'), comparison: read(files.comparison ?? 'comparison.json'), baseUrl: '', kind: 'example' }
-  const s = buildSession(parts)
+  const saved = read('session.json') as Session | undefined
+  let s: Session
+  if (saved) s = { ...saved, id: `example-${id}`, kind: 'example' }
+  else {
+    const manifest = read('climbr.json'), files = manifest?.files ?? {}
+    const coach = read('coach.json')
+    const parts: SessionParts = { manifest: coach ? { ...manifest, coach } : manifest, climb: read(files.climb ?? 'climb.json'), sequence: read(files.sequence ?? 'sequence.json'), holds: read(files.holds ?? 'holds.json'), comparison: read(files.comparison ?? 'comparison.json'), baseUrl: '', kind: 'example' }
+    s = buildSession(parts)
+  }
   const climbId = crypto.randomUUID()
   const videoPath = `${uid}/${climbId}.mp4`, thumbPath = `${uid}/${climbId}.jpg`
   for (const [bucket, p, file, type] of [['climb-videos', videoPath, 'climb.mp4', 'video/mp4'], ['climb-thumbnails', thumbPath, 'poster.jpg', 'image/jpeg']] as const) {
@@ -40,12 +48,12 @@ for (const id of EXAMPLES) {
     if (error) { console.error(`Upload of ${file} failed:`, error.message); process.exit(1) }
   }
   const score = coachScore(s), status = climbStatus(s), best = bestMove(s)
-  const { wall: _wall, ...rest } = s
+  const { wall: _wall, coach, ...rest } = s
   const { error } = await sb.from('climbs').insert({
     id: climbId, user_id: uid, title: s.title, video_path: videoPath, thumbnail_path: thumbPath, duration: s.video?.duration ?? s.duration,
     route_color: s.route.color, hold_count: s.holdsDetected, status: status.status, coach_score: score.total,
     sub_scores: score.parts.map(({ key, label, value }) => ({ key, label, value })),
-    analysis: { ...rest, video: s.video ? { ...s.video, src: '', poster: undefined } : undefined, insights: coachInsights(s).slice(0, 8), status },
+    analysis: { ...rest, coach: coach ?? null, video: s.video ? { ...s.video, src: '', webm: undefined, poster: undefined, mediaId: undefined } : undefined, insights: coachInsights(s).slice(0, 8), status },
     highlight: best ? { title: best.title, body: best.body, time: best.time ?? null } : null,
   })
   if (error) { console.error('Saving the climb failed:', error.message); process.exit(1) }

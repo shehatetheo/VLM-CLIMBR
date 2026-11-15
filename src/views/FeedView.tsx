@@ -136,6 +136,8 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
   const total = score?.total ?? climb?.coach_score ?? 0
   const isExample = climb ? climb.is_example : true
   const openId = climb ? `c-${climb.id}` : s?.id
+  // Examples are posted by the official account, but they are someone's climb.
+  const name = (isExample && s?.climber) || climb?.username || s?.climber || 'CLIMBR'
 
   const act = async (kind: 'props' | 'save') => {
     if (!climb) { toast('That is a built-in example. Props and saves work on shared climbs.'); return }
@@ -162,7 +164,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
   }
 
   return (
-    <article className="feed-card" ref={root} aria-label={`${climb?.username ?? s?.climber ?? 'A climber'}'s climb`}>
+    <article className="feed-card" ref={root} aria-label={`${name}'s climb`}>
       {near && src ? (
         <video ref={video} src={src} poster={poster} muted playsInline preload={active ? 'auto' : 'metadata'} onClick={() => setPaused((p) => !p)} onEnded={() => setSheet(true)} />
       ) : poster ? <img src={poster} alt="" /> : <div className="feed-skel"><span /><span /><span /></div>}
@@ -173,7 +175,7 @@ function FeedCard({ entry, index, active, near, onActive, onSession, onClimb, go
         <div className="feed-who">
           <ScoreBadge value={total} size={64} animate={false} />
           <div>
-            <b>{climb?.username ?? s?.climber ?? 'CLIMBR'}</b>
+            <b>{name}</b>
             <span>{climb?.title ?? s?.title ?? ''}</span>
           </div>
         </div>
