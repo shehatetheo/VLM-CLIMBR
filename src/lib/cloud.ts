@@ -164,10 +164,15 @@ export async function listMyClimbs(): Promise<CloudClimb[]> {
   return withUrls((data ?? []) as CloudClimb[], false)
 }
 
-export async function setVisibility(id: string, visibility: 'private' | 'public') {
-  const { error } = await supa().from('climbs').update({ visibility }).eq('id', id)
+/** Share or unshare a climb. Returns whether it is approved, so the app can
+ *  say "in the feed" or "in review" (approval is automatic unless the
+ *  database's auto_approve setting is switched off). */
+export async function setVisibility(id: string, visibility: 'private' | 'public'): Promise<boolean> {
+  const { data, error } = await supa().from('climbs').update({ visibility }).eq('id', id).select('is_approved').single()
   if (error) throw new Error('We could not change that. Try again.')
+  return Boolean(data?.is_approved)
 }
+export const sharedMessage = (approved: boolean) => (approved ? 'Shared. It is in the feed now.' : 'Sent for review. It shows up in the feed once it is approved.')
 
 export async function deleteClimb(c: Pick<CloudClimb, 'id' | 'video_path' | 'thumbnail_path'>) {
   const sb = supa()

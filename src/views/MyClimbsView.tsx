@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Globe, Lock, MountainSnow, Play, Trash2, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '../components/Toast'
-import { cloudEnabled, deleteClimb, listMyClimbs, setVisibility, type CloudClimb } from '../lib/cloud'
+import { cloudEnabled, deleteClimb, listMyClimbs, setVisibility, sharedMessage, type CloudClimb } from '../lib/cloud'
 import { coachScore, secs } from '../lib/score'
 import { climbStatus, type ClimbStatus } from '../lib/status'
 import { deleteSession, listSessions, type StoredSession } from '../lib/store'
@@ -45,8 +45,8 @@ export function MyClimbsView({ examples, go }: { examples: Session[]; go: (h: st
     setMenu(null)
     if (!t.cloud) { toast('Open the climb and save it online first.'); return }
     try {
-      await setVisibility(t.cloud.id, visibility)
-      toast(visibility === 'public' ? 'Sent for review. It shows up in the feed once it is approved.' : 'This climb is private again.')
+      const approved = await setVisibility(t.cloud.id, visibility)
+      toast(visibility === 'public' ? sharedMessage(approved) : 'This climb is private again.')
       load()
     } catch (e) { toast((e as Error).message, 'warn') }
   }
@@ -56,7 +56,7 @@ export function MyClimbsView({ examples, go }: { examples: Session[]; go: (h: st
     <section className="screen">
       <div className="wrap">
         <div className="page-head"><Logo height={32} /><GlossButton size="sm" onClick={() => go('#/analyze')}><Upload size={16} /> new climb</GlossButton></div>
-        <SectionHeader level={1} title="my climbs" sub="your climbs are saved on this device. accounts are coming soon, so you'll be able to keep them forever." />
+        <SectionHeader level={1} title="my climbs" sub={cloudEnabled ? 'saved on this device, with a private copy online so you can share them.' : 'your climbs are saved on this device.'} />
 
         {tiles === null && <div className="tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="tile skel" />)}</div>}
         {tiles !== null && all.length === 0 && (
