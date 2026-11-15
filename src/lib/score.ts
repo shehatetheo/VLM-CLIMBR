@@ -265,10 +265,10 @@ export function coachInsights(s: Session): Insight[] {
     const lost = p.gap - typical
     fixes.push({
       id: `pause-${p.from.toFixed(2)}`, kind: 'fix', time: p.from, holds, cost: lost, costLabel: `about ${secs(lost, 1)}`,
-      title: `At ${at(p.from)} you paused for ${secs(p.gap, 1)} ${where}.`,
-      body: `Nothing moved until ${at(p.to)}. That is about ${secs(lost, 1)} of hanging on your arms.`,
-      tip: 'Read this move from the ground so you can keep going when you get here.',
-      ref: refOf(holds), short: `You lost about ${secs(lost, 1)} pausing ${where}.`,
+      title: `At ${at(p.from)} you took a ${secs(p.gap, 1)} breather ${where}.`,
+      body: `Nothing moved until ${at(p.to)}: about ${secs(lost, 1)} of hanging out on your arms. Nice view, pricey rent.`,
+      tip: 'Read this move from the ground, so when you get here your body already knows the answer.',
+      ref: refOf(holds), short: `The easiest time to win back: about ${secs(lost, 1)} spent pausing ${where}.`,
     })
   }
 
@@ -276,15 +276,15 @@ export function coachInsights(s: Session): Insight[] {
   for (const r of regrabs(s).slice(0, 3)) {
     const l = LIMB_BY_KEY[r.move.limb], place = describeHold(s, r.move.holdId)
     const foot = !l.hand
-    const title = r.kind === 'reset' ? `At ${at(r.move.time)} your ${l.name} came off ${place} and you re-set it.`
-      : r.kind === 'reversed' ? `At ${at(r.move.time)} your ${l.name} went back to ${place} after trying the next hold.`
-        : `At ${at(r.move.time)} your ${l.name} only touched ${place} for ${secs(r.move.duration, 1)}.`
+    const title = r.kind === 'reset' ? `At ${at(r.move.time)} your ${l.name} slipped off ${place}, and you put it right back.`
+      : r.kind === 'reversed' ? `At ${at(r.move.time)} your ${l.name} went exploring, then came home to ${place}.`
+        : `At ${at(r.move.time)} your ${l.name} gave ${place} a quick high-five (${secs(r.move.duration, 1)}) and moved on.`
     fixes.push({
       id: `regrab-${r.move.limb}-${r.move.time.toFixed(2)}`, kind: 'fix', time: r.move.time, holds: [r.move.holdId], limbs: [r.move.limb], cost: r.lost, costLabel: `about ${secs(r.lost, 1)}`,
       title,
-      body: `That cost about ${secs(r.lost, 1)}${r.kind === 'reversed' ? ' and a move you had to undo' : ''}.`,
-      tip: r.kind === 'touch' ? 'Either skip that hold or commit to it.' : foot ? 'Put your weight on that foot before you reach.' : 'Watch the hold until your hand is on it, and take it where you want it the first time.',
-      ref: refOf([r.move.holdId], r.move.limb), short: `You lost about ${secs(r.lost, 1)} re-placing your ${l.name}.`,
+      body: `That cost about ${secs(r.lost, 1)}${r.kind === 'reversed' ? ', plus a move you had to undo' : ''}. Small on its own, but these add up.`,
+      tip: r.kind === 'touch' ? 'Commit to that hold or skip it entirely. Both work; the in-between is the expensive one.' : foot ? 'Settle your weight onto that foot before you reach. Feet love commitment.' : 'Keep your eyes on the hold until your hand lands, and grab it the way you want it the first time.',
+      ref: refOf([r.move.holdId], r.move.limb), short: `About ${secs(r.lost, 1)} went to re-placing your ${l.name}, and that is easy time to win back.`,
     })
   }
 
@@ -296,10 +296,10 @@ export function coachInsights(s: Session): Insight[] {
     const [a, b] = longestOff(s, weak), name = LIMB_BY_KEY[weak].name
     fixes.push({
       id: `foot-${weak}`, kind: 'fix', time: a, limbs: [weak], cost: (b - a) * 0.3, // not time lost, but arms tiring: a third of the hanging time
-      title: `Your ${name} was on a hold only ${Math.round(wc * 100)}% of the climb, much less than your hands (${Math.round(hands * 100)}%).`,
-      body: `The longest stretch was ${secs(b - a, 1)} from ${at(a)}. With a foot off, your arms carry that weight.`,
-      tip: `Place your ${name} before you reach with a hand.`,
-      ref: refOf([], weak), short: `Your ${name} was off the wall ${Math.round((1 - wc) * 100)}% of the time, so your arms did the work.`,
+      title: `Your ${name} was on a hold ${Math.round(wc * 100)}% of the climb, while your hands clocked ${Math.round(hands * 100)}%.`,
+      body: `Its longest solo flight was ${secs(b - a, 1)} from ${at(a)}. While a foot dangles, your arms pick up the tab.`,
+      tip: `Place your ${name} first, then reach: legs are the free upgrade. (Cut feet on purpose on a steep move? Carry on, that was style.)`,
+      ref: refOf([], weak), short: `Your ${name} spent ${Math.round((1 - wc) * 100)}% of the climb off the wall, so your arms covered for it.`,
     })
   }
 
@@ -315,13 +315,13 @@ export function coachInsights(s: Session): Insight[] {
       if (extra.length && diff > 0.2) fixes.push({
         id: 'extra-holds', kind: 'fix', holds: extra, cost: diff, costLabel: `about ${secs(diff, 1)}`,
         title: `You used ${extra.length === 1 ? `an extra hold (${describeHold(s, extra[0])})` : `${extra.length} extra holds`} that your fastest attempt skipped.`,
-        body: `Attempt ${fastest.index} topped out ${secs(diff, 1)} faster without ${extra.length === 1 ? 'it' : 'them'}.`,
-        tip: `Try the climb again and skip ${extra.length === 1 ? 'it' : 'them'}.`,
-        ref: refOf(extra), short: `Your fastest attempt skipped ${plural(extra.length, 'hold')} you used here and was ${secs(diff, 1)} quicker.`,
+        body: `Attempt ${fastest.index} topped out ${secs(diff, 1)} faster without ${extra.length === 1 ? 'it' : 'them'}. The fast version of you already found the shortcut.`,
+        tip: `Next go, skip ${extra.length === 1 ? 'it' : 'them'} and trust the bigger move.`,
+        ref: refOf(extra), short: `Your fastest attempt skipped ${plural(extra.length, 'hold')} you used here and was ${secs(diff, 1)} quicker. Copy its homework.`,
       })
     } else if (mine.elapsed != null) {
       const avg = sends.reduce((t, x) => t + x.elapsed!, 0) / sends.length
-      good.push({ id: 'fastest', kind: 'good', cost: avg - mine.elapsed, title: `This was your fastest of ${sends.length} sends, ${secs(avg - mine.elapsed, 1)} under your average.`, body: `You topped out in ${secs(mine.elapsed)} on ${plural(mine.sequence.length, 'hold')}.` })
+      good.push({ id: 'fastest', kind: 'good', cost: avg - mine.elapsed, title: `Your fastest of ${sends.length} sends, ${secs(avg - mine.elapsed, 1)} under your average. Personal-best energy.`, body: `You topped out in ${secs(mine.elapsed)} on ${plural(mine.sequence.length, 'hold')}.` })
       // Holds only the slower attempts used.
       const others = sends.filter((x) => x.label !== mine.label)
       const skipped = new Map<number, typeof others>()
@@ -332,7 +332,7 @@ export function coachInsights(s: Session): Insight[] {
         if (saved > 0.2) good.push({
           id: 'skipped', kind: 'good', holds: [id], cost: saved,
           title: `On attempt${who.length > 1 ? 's' : ''} ${list(who.map((x) => x.index).sort((x, y) => x - y))} you used an extra hold (${describeHold(s, id)}) that this attempt skipped.`,
-          body: `Skipping it saved about ${secs(saved, 1)}. Keep this sequence.`, ref: refOf([id]),
+          body: `Skipping it saved about ${secs(saved, 1)}. This sequence is a keeper.`, ref: refOf([id]),
         })
       }
     }
@@ -343,17 +343,17 @@ export function coachInsights(s: Session): Insight[] {
   if (anchor && anchor.duration >= Math.max(2.5, T * 0.2)) good.push({
     id: 'anchor', kind: 'good', time: anchor.time, holds: [anchor.holdId], limbs: [anchor.limb], cost: anchor.duration * 0.2,
     title: `Your ${LIMB_BY_KEY[anchor.limb].name} stayed on ${describeHold(s, anchor.holdId)} for ${secs(anchor.duration, 1)} while the rest of you moved.`,
-    body: 'A foot that stays put is a base to push from. That is good footwork.', ref: refOf([anchor.holdId], anchor.limb),
+    body: 'The most reliable thing on the wall. A foot you can push from makes every reach easier.', ref: refOf([anchor.holdId], anchor.limb),
   })
-  if (!ps.some((p) => p.gap > R.pause) && s.moves.length > 3) good.push({ id: 'rhythm', kind: 'good', cost: 0.5, title: `You never stopped for more than ${R.pause}s.`, body: 'Steady rhythm keeps you off your arms. Keep climbing at this pace.' })
-  if (coverage(s, 'left_foot') >= 0.85 && coverage(s, 'right_foot') >= 0.85) good.push({ id: 'feet-on', kind: 'good', cost: 0.4, title: 'Both feet stayed on holds for most of the climb.', body: 'Your legs did the pushing and your arms only steered.' })
-  if (!regrabs(s).length && s.moves.length > 3) good.push({ id: 'clean', kind: 'good', cost: 0.3, title: 'Every placement stuck the first time.', body: 'No re-grabs and no hold you had to adjust on.' })
+  if (!ps.some((p) => p.gap > R.pause) && s.moves.length > 3) good.push({ id: 'rhythm', kind: 'good', cost: 0.5, title: `You never stopped for more than ${R.pause}s.`, body: 'Steady as a metronome. That rhythm keeps the pump away, so keep this pace.' })
+  if (coverage(s, 'left_foot') >= 0.85 && coverage(s, 'right_foot') >= 0.85) good.push({ id: 'feet-on', kind: 'good', cost: 0.4, title: 'Both feet stayed on holds for most of the climb.', body: 'Your legs did the heavy lifting and your arms just steered. Textbook.' })
+  if (!regrabs(s).length && s.moves.length > 3) good.push({ id: 'clean', kind: 'good', cost: 0.3, title: 'Every placement stuck the first time.', body: 'No re-grabs, no fidgeting. Surgical.' })
 
   // 6 · what we could not see
   for (const u of unseen(s)) unsure.push({
     id: `unseen-${u.limb}`, kind: 'unsure', time: u.from, limbs: [u.limb], cost: 0,
-    title: `From ${at(u.from)} to ${at(u.to)} we couldn’t clearly see your ${LIMB_BY_KEY[u.limb].name}.`,
-    body: 'Anything said about that limb in this stretch is a best guess. Filming from further back or a different side would help.', ref: refOf([], u.limb),
+    title: `From ${at(u.from)} to ${at(u.to)} your ${LIMB_BY_KEY[u.limb].name} slipped out of view.`,
+    body: 'So anything about it in that stretch is a best guess. Filming from a bit further back (or the other side) gives the coach a better seat.', ref: refOf([], u.limb),
   })
 
   const order = (xs: Insight[]) => xs.sort((a, b) => b.cost - a.cost)
@@ -400,7 +400,7 @@ export function bestMove(s: Session): BestMove | null {
       const rel = d / torso
       if (rel < B.reachMin || b.center[1] > a.center[1]) continue // only reaches upward
       const meters = s.scale ? ` (about ${(d * s.scale.metersPerUnit).toFixed(1)} m)` : ''
-      picks.push({ kind: 'reach', worth: rel * B.reach, time: ms[i].time, holds: [a.id, b.id], limbs: [l], title: `That reach at ${at(ms[i].time)} was big.`, body: `Your ${LIMB_BY_KEY[l].name} went from ${describeHold(s, a.id)} to ${describeHold(s, b.id)} in one move${meters}. Confident.` })
+      picks.push({ kind: 'reach', worth: rel * B.reach, time: ms[i].time, holds: [a.id, b.id], limbs: [l], title: `That reach at ${at(ms[i].time)}? Huge.`, body: `Your ${LIMB_BY_KEY[l].name} went from ${describeHold(s, a.id)} to ${describeHold(s, b.id)} in one move${meters}. Zero hesitation.` })
     }
   }
 
@@ -413,7 +413,7 @@ export function bestMove(s: Session): BestMove | null {
   const runLen = bestRun[1] - bestRun[0]
   if (runLen >= B.runMin) {
     const from = times[bestRun[0]], to = times[bestRun[1] - 1]
-    picks.push({ kind: 'run', worth: runLen * B.run, time: from, holds: handsAt(s, to), title: `From ${at(from)} to ${at(to)} you made ${runLen} moves without stopping.`, body: 'No hesitation, no re-adjusting. That is what flow looks like.' })
+    picks.push({ kind: 'run', worth: runLen * B.run, time: from, holds: handsAt(s, to), title: `From ${at(from)} to ${at(to)}: ${runLen} moves, no stopping.`, body: 'No hesitation, no fiddling. That is what flow looks like, and it looked good on you.' })
   }
 
   // a hold this attempt skipped
@@ -422,16 +422,16 @@ export function bestMove(s: Session): BestMove | null {
   if (mine) {
     const others = attempts.filter((x) => !x.isThis)
     const skipped = [...new Set(others.flatMap((o) => o.sequence))].filter((id) => !mine.sequence.includes(id) && others.filter((o) => o.sequence.includes(id)).length >= Math.max(1, others.length - 1))
-    if (skipped.length) picks.push({ kind: 'skip', worth: B.skip, holds: skipped.slice(0, 1), title: `You skipped ${describeHold(s, skipped[0])} that your other attempts needed.`, body: 'Going straight past it is a bigger, more confident move, and it saved you time.' })
+    if (skipped.length) picks.push({ kind: 'skip', worth: B.skip, holds: skipped.slice(0, 1), title: `You skipped ${describeHold(s, skipped[0])}, which your other attempts needed.`, body: 'Going straight past it takes nerve, and it saved you time.' })
   }
 
   // a slip fixed fast
   const quick = regrabs(s).filter((r) => r.kind === 'reset' && r.lost <= B.recoverySeconds)[0]
-  if (quick) picks.push({ kind: 'recovery', worth: B.recovery, time: quick.move.time, holds: [quick.move.holdId], limbs: [quick.move.limb], title: `Quick save at ${at(quick.move.time)}.`, body: `Your ${LIMB_BY_KEY[quick.move.limb].name} came off ${describeHold(s, quick.move.holdId)} and you had it back in ${secs(quick.lost, 1)}. Staying calm there kept the climb alive.` })
+  if (quick) picks.push({ kind: 'recovery', worth: B.recovery, time: quick.move.time, holds: [quick.move.holdId], limbs: [quick.move.limb], title: `Quick save at ${at(quick.move.time)}.`, body: `Your ${LIMB_BY_KEY[quick.move.limb].name} came off ${describeHold(s, quick.move.holdId)} and was back in ${secs(quick.lost, 1)}. Calm under pressure; the climb lived on because of it.` })
 
   // a foot that stayed put
   const anchor = [...s.moves].filter((m) => isFoot(m.limb)).sort((a, b) => b.duration - a.duration)[0]
-  if (anchor && anchor.duration >= 2.5) picks.push({ kind: 'anchor', worth: anchor.duration * B.anchor, time: anchor.time, holds: [anchor.holdId], limbs: [anchor.limb], title: `Your ${LIMB_BY_KEY[anchor.limb].name} did not move for ${secs(anchor.duration, 1)}.`, body: `It stayed on ${describeHold(s, anchor.holdId)} while everything else moved. A foot you can trust makes every reach easier.` })
+  if (anchor && anchor.duration >= 2.5) picks.push({ kind: 'anchor', worth: anchor.duration * B.anchor, time: anchor.time, holds: [anchor.holdId], limbs: [anchor.limb], title: `Your ${LIMB_BY_KEY[anchor.limb].name} did not budge for ${secs(anchor.duration, 1)}.`, body: `It held ${describeHold(s, anchor.holdId)} while everything else moved. A foot you can trust makes every reach easier.` })
 
   picks.sort((a, b) => b.worth - a.worth)
   if (!picks.length) return null
@@ -442,9 +442,20 @@ export function bestMove(s: Session): BestMove | null {
 /** One plain sentence for the top of the results. */
 export function verdict(s: Session, insights = coachInsights(s)): string {
   const T = climbTime(s)
-  const lead = s.toppedOut ? `Clean send in ${secs(s.elapsed ?? T, 1)}.` : `${secs(T, 1)} on the wall without topping out.`
+  const t = secs(s.toppedOut ? s.elapsed ?? T : T, 1)
+  // A little variety, but the same climb always reads the same.
+  const lead = pickFor(s, s.toppedOut
+    ? [`Clean send in ${t}.`, `Sent in ${t}. The wall never stood a chance.`, `Topped out in ${t}. Very smooth.`]
+    : [`${t} on the wall, and the top is still up for grabs.`, `${t} of climbing. The wall took this round; the rematch is yours.`])
   const top = insights.find((i) => i.kind === 'fix')
-  return `${lead} ${top?.short ?? (s.toppedOut ? 'Nothing big to fix: repeat it and go for a faster time.' : 'Nothing big went wrong: keep going for the top.')}`
+  return `${lead} ${top?.short ?? (s.toppedOut ? 'Nothing big to fix. Run it back and chase a faster time.' : 'Nothing big went wrong. Next time, the top.')}`
+}
+
+/** One of a few phrasings, chosen by the climb itself so it never flickers. */
+export function pickFor<T>(s: Pick<Session, 'id' | 'title'>, options: T[]): T {
+  let h = 0
+  for (const c of `${s.id}|${s.title}`) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return options[h % options.length]
 }
 
 export { cap as capitalize }

@@ -1,64 +1,70 @@
 {
-  "headline": "Fastest send: short beta, 1.6s under average",
-  "summary": "You sent The Green Slab in 11.8s on the shortest beta of the session, skipping 7 holds to keep things clean. Your right foot anchored on hold 2 for nearly half the climb, letting the other limbs move freely. The one wobble was a 1.8s read between hold 15 and your left foot's move to 10.",
-  "score": 82,
-  "scores": {
-    "efficiency": 88,
-    "flow": 76,
-    "footwork": 74,
-    "pacing": 80
+ "source": "vlm",
+ "headline": "Gravity blinked, and you didn't.",
+ "summary": "You sent your fastest and most efficient line yet, skipping the lower holds to save time. The only thing slowing you down was a little too much sightseeing on the upper half of the wall. Keep that new 9-hold sequence and just move a bit faster between your hand placements.",
+ "score": 96,
+ "scores": {
+  "efficiency": 100,
+  "flow": 94,
+  "footwork": 85,
+  "pacing": 90
+ },
+ "strengths": [
+  {
+   "title": "Surgical precision",
+   "detail": "Every single placement stuck on the first try. No fidgeting, no re-grabs, just pure confidence in your hands."
   },
-  "strengths": [
-    {
-      "title": "Shortest beta of session",
-      "detail": "You skipped 7 of 16 holds, cutting readjustments and finishing 1.6s faster than your session average. Fewer touches kept the climb crisp."
-    },
-    {
-      "title": "Stable right-foot anchor",
-      "detail": "Hold 2 carried your right foot for 4.61s, anchoring the body while hands and left foot cycled through the middle section."
-    },
-    {
-      "title": "Clean matched-hand transitions",
-      "detail": "Both hands shared holds 7, 10, 12, and 16, giving you natural rest points without breaking rhythm."
-    }
-  ],
-  "focus": [
-    {
-      "title": "1.8s read mid-climb",
-      "detail": "No new placement between 6.80s and 8.63s while your right hand sat on 15. Scanning the next move from the ground would close this gap.",
-      "time": 6.8,
-      "holds": [
-        15,
-        10
-      ]
-    },
-    {
-      "title": "Left foot hanging 21%",
-      "detail": "Your left foot was off a hold for nearly a quarter of the climb, shifting load to the arms. Placing it earlier keeps tension balanced.",
-      "time": null,
-      "holds": [
-        5,
-        10
-      ]
-    }
-  ],
-  "drills": [
-    {
-      "name": "Pre-scan from ground",
-      "how": "Before stepping on, walk the route from the floor and call out each hand and foot placement. This shrinks in-climb reading pauses.",
-      "dose": "Every session, 2 routes"
-    },
-    {
-      "name": "Foot-first movement",
-      "how": "Drill moves where the foot lands before the hand reaches. This trains the habit of placing feet early to reduce arm load.",
-      "dose": "3 x 5 reps per session"
-    }
-  ],
-  "beta": "Keep the 9-hold line (7, 1, 2, 10, 12, 5, 6, 15, 16) but pre-place the left foot on 10 before the right hand commits to 15 to eliminate the mid-climb pause.",
-  "next_goal": "Send the same 9-hold beta in under 10.5s with the left foot on a hold 85%+ of the time.",
-  "source": "vlm",
-  "model": "qwen/qwen3.8-27b",
-  "watchedVideo": true,
-  "frames": 8,
-  "generatedAt": "2026-10-01T16:53:02Z"
+  {
+   "title": "Efficient line-finding",
+   "detail": "You skipped the small green hold low on the left, which saved you over two seconds compared to your other attempts. That's a keeper."
+  },
+  {
+   "title": "Reliable right foot",
+   "detail": "Your right foot stayed glued to the small green hold near the start for 4.6 seconds, giving you a solid base to push from."
+  }
+ ],
+ "focus": [
+  {
+   "title": "The scenic pause",
+   "detail": "At 6.8s, you hung on the green hold near the top for 1.8 seconds before moving. Try to keep your momentum going and move your left foot as soon as your hand is set.",
+   "time": 6.8,
+   "holds": [
+    15
+   ]
+  },
+  {
+   "title": "Upper-half hesitation",
+   "detail": "At 2.9s, you took a 1.6-second breather on the green hold in the upper half. Focus on your next move before you get there so you can flow through without stopping.",
+   "time": 2.9,
+   "holds": [
+    12
+   ]
+  },
+  {
+   "title": "Left foot flight time",
+   "detail": "Your left foot was off a hold for 1.9 seconds around the 2.6-second mark. Try to keep it closer to the wall or on a hold to help your arms out.",
+   "time": 2.6,
+   "holds": [
+    10
+   ]
+  }
+ ],
+ "drills": [
+  {
+   "name": "Speedy transitions",
+   "how": "Climb the route but try to move your feet the exact moment your hands are set, with no pauses.",
+   "dose": "5 sends"
+  },
+  {
+   "name": "Footwork focus",
+   "how": "Focus on keeping both feet on holds as much as possible, even if it means taking a smaller step.",
+   "dose": "3 x 5 reps"
+  }
+ ],
+ "beta": "Start on the big green hold in the middle, move to the green hold in the middle on the left, then the green hold in the upper half, and finish on the finish hold.",
+ "next_goal": "Beat your 11.8s time by 1 second while keeping that 9-hold sequence.",
+ "generatedAt": "2026-11-15T19:34:02.374Z",
+ "model": "qwen/qwen3.8-27b",
+ "watchedVideo": true,
+ "frames": 8
 }

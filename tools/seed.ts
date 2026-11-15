@@ -23,11 +23,28 @@ if (!url || !key || !secret) { console.error('Set VITE_SUPABASE_URL, VITE_SUPABA
 const sb = createClient(url, key, { auth: { persistSession: false } })
 const EXAMPLES = ['green-vb', 'oliver']
 
-const { data: auth, error: authError } = await sb.auth.signInAnonymously()
-if (authError || !auth.user) { console.error('Anonymous sign-in failed. Enable it under Authentication → Sign In / Providers.', authError?.message); process.exit(1) }
-const uid = auth.user.id
-await sb.from('profiles').upsert({ id: uid, username: `Climbr${Math.floor(1000 + Math.random() * 9000)}` })
+// The official account is the same one every run (its refresh token is kept in
+// the git-ignored .climbr folder), so a re-seed can remove its old files.
+const ACCOUNT = path.join('.climbr', 'seed-account.json')
+let user = null as null | { id: string }
+if (fs.existsSync(ACCOUNT)) {
+  const { data } = await sb.auth.refreshSession({ refresh_token: JSON.parse(fs.readFileSync(ACCOUNT, 'utf8')).refresh_token })
+  user = data.user
+}
+if (!user) {
+  const { data, error } = await sb.auth.signInAnonymously()
+  if (error || !data.user) { console.error('Anonymous sign-in failed. Enable it under Authentication → Sign In / Providers.', error?.message); process.exit(1) }
+  user = data.user
+}
+const keep = () => sb.auth.getSession().then(({ data }) => fs.writeFileSync(ACCOUNT, JSON.stringify({ refresh_token: data.session?.refresh_token })))
+await keep()
+const uid = user.id
+await sb.from('profiles').upsert({ id: uid, username: `Climbr${Math.floor(1000 + Math.random() * 9000)}` }, { ignoreDuplicates: true })
 { const { error } = await sb.rpc('admin_clear_examples', { p_secret: secret }); if (error) { console.error('The moderation secret was refused:', error.message); process.exit(1) } }
+for (const bucket of ['climb-videos', 'climb-thumbnails']) {
+  const { data } = await sb.storage.from(bucket).list(uid)
+  if (data?.length) await sb.storage.from(bucket).remove(data.map((f) => `${uid}/${f.name}`))
+}
 
 for (const id of EXAMPLES) {
   const dir = path.join('public', 'examples', id)
@@ -61,3 +78,4 @@ for (const id of EXAMPLES) {
   if (marked.error) { console.error('Marking the example failed:', marked.error.message); process.exit(1) }
   console.log(`seeded ${id} → ${climbId} (score ${score.total}, ${status.status})`)
 }
+await keep()

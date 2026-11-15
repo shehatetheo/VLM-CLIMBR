@@ -76,7 +76,7 @@ export function computeInsights(s: Session): Insight[] {
       id: 'longest',
       tone: top.duration > elapsed * 0.33 ? 'warn' : 'info',
       title: `Longest hold: ${LIMB_BY_KEY[top.limb].name} on hold ${top.holdId}`,
-      detail: `${top.duration.toFixed(2)} s from ${top.time.toFixed(2)} s — ${Math.round((top.duration / elapsed) * 100)}% of the climb. That limb was your anchor while the others moved.`,
+      detail: `${top.duration.toFixed(2)} s from ${top.time.toFixed(2)} s, ${Math.round((top.duration / elapsed) * 100)}% of the climb. That limb was your anchor while the others moved.`,
       metric: `${top.duration.toFixed(1)} s`,
       time: top.time,
       holds: [top.holdId],
@@ -89,7 +89,7 @@ export function computeInsights(s: Session): Insight[] {
       id: 'pause',
       tone: still.to - still.from > 2.5 ? 'warn' : 'info',
       title: 'Longest pause between moves',
-      detail: `No new placement from ${still.from.toFixed(2)} s to ${still.to.toFixed(2)} s. Reading the next move from the ground saves this time on the wall.`,
+      detail: `No new placement from ${still.from.toFixed(2)} s to ${still.to.toFixed(2)} s. Read the next move from the ground and this breather turns into free time.`,
       metric: `${(still.to - still.from).toFixed(1)} s`,
       time: still.from,
     })
@@ -102,7 +102,7 @@ export function computeInsights(s: Session): Insight[] {
       id: 'feet',
       tone: weak.c < 0.8 ? 'warn' : 'good',
       title: weak.c < 0.8 ? `${cap(LIMB_BY_KEY[weak.k].name)} spent ${Math.round((1 - weak.c) * 100)}% of the climb off a hold` : 'Feet stayed on holds',
-      detail: weak.c < 0.8 ? 'Every second a foot hangs, the arms carry that weight. Place it before you reach.' : 'Both feet were on holds for most of the climb — the arms only steered.',
+      detail: weak.c < 0.8 ? 'While a foot dangles, your arms pick up the tab. Place it before you reach.' : 'Both feet were on holds for most of the climb, so your arms just steered.',
       metric: `${Math.round(weak.c * 100)}%`,
     })
   }
@@ -113,7 +113,7 @@ export function computeInsights(s: Session): Insight[] {
       id: 'matches',
       tone: m.length > 3 ? 'warn' : 'info',
       title: `Matched hands on ${m.length} hold${m.length > 1 ? 's' : ''}`,
-      detail: `Both hands shared ${m.join(', ')}. Matching is a rest — on easy terrain, crossing through is faster.`,
+      detail: `Both hands shared ${m.join(', ')}. Matching is a nice rest, but on easy terrain crossing through is faster.`,
       holds: m,
     })
   }
@@ -124,7 +124,7 @@ export function computeInsights(s: Session): Insight[] {
     id: 'rhythm',
     tone: footMoves >= handMoves * 0.7 ? 'good' : 'warn',
     title: `${handMoves} hand moves · ${footMoves} foot moves`,
-    detail: footMoves >= handMoves * 0.7 ? 'Your feet kept pace with your hands — a climber pushing with the legs.' : 'Hands moved far more often than feet: more feet between reaches will take load off the arms.',
+    detail: footMoves >= handMoves * 0.7 ? 'Your feet kept pace with your hands. That is a climber pushing with the legs.' : 'Your hands did most of the traveling. A few more foot moves between reaches will give your arms a break.',
     metric: `${(s.moves.length / Math.max(0.1, elapsed)).toFixed(2)} moves/s`,
   })
   return out
@@ -152,20 +152,20 @@ export function onDeviceFeedback(s: Session): CoachFeedback {
   const weakFoot = util ? (['left_foot', 'right_foot'] as LimbKey[]).sort((a, b) => util[a].coverage - util[b].coverage)[0] : null
   return {
     source: 'on-device',
-    headline: s.toppedOut ? `Clean send in ${elapsed.toFixed(2)} s on ${used} holds` : `${used} holds in — the top is next`,
+    headline: s.toppedOut ? `Sent in ${elapsed.toFixed(1)} s on ${used} holds. Smooth.` : `${used} holds in, and the top is next`,
     summary: `You ${s.toppedOut ? 'topped out' : 'climbed'} the ${s.route.color}${s.route.grade ? ` ${s.route.grade}` : ''} route using ${used} of ${s.holdsDetected} holds. ${ins.find((i) => i.id === 'rank')?.detail ?? ''} Your ${top ? `${LIMB_BY_KEY[top.limb].name} on ${top.holdId}` : 'grip'} carried the middle of the climb.`.trim(),
     score,
     scores,
     strengths: ins.filter((i) => i.tone === 'good').slice(0, 3).map((i) => ({ title: i.title, detail: i.detail })),
     focus: ins.filter((i) => i.tone !== 'good').slice(0, 3).map((i) => ({ title: i.title, detail: i.detail, time: i.time ?? null, holds: i.holds })),
     drills: [
-      { name: 'Silent feet', how: 'Climb the route again placing every foot without a sound — it forces you to look at each foothold before you weight it.', dose: '3 laps' },
+      { name: 'Silent feet', how: 'Climb it again placing every foot without a sound, like you are sneaking past a sleeping dog. It makes you look at each foothold before you trust it.', dose: '3 laps' },
       weakFoot
-        ? { name: `${cap(LIMB_BY_KEY[weakFoot].name)} first`, how: `On every move, place the ${LIMB_BY_KEY[weakFoot].name} before you reach with a hand.`, dose: '2 × 4 moves' }
-        : { name: 'Hover hands', how: 'Before each grab, hover the hand over the hold for one second — it teaches you to move from balance, not momentum.', dose: '2 laps' },
+        ? { name: `${cap(LIMB_BY_KEY[weakFoot].name)} first`, how: `On every move, place the ${LIMB_BY_KEY[weakFoot].name} before you reach with a hand. Feet first, glory second.`, dose: '2 × 4 moves' }
+        : { name: 'Hover hands', how: 'Before each grab, hover your hand over the hold for one second. It teaches you to move from balance, not momentum.', dose: '2 laps' },
     ],
     beta: `Keep the ${s.sequence.join(' › ')} line${s.comparison ? ' — it was your shortest' : ''}, and cut the pause ${still.to - still.from > 1.2 ? `around ${still.from.toFixed(1)} s` : 'before the top'} by pre-reading the finish.`,
-    next_goal: s.toppedOut ? `Send it under ${(elapsed * 0.9).toFixed(1)} s with both feet on holds 85% of the time.` : 'Top out — both hands on the finish hold.',
+    next_goal: s.toppedOut ? `Bet you can send it under ${(elapsed * 0.9).toFixed(1)} s with both feet on holds 85% of the time.` : 'Top out: both hands on the finish hold, and hang there like you own it.',
   }
 }
 

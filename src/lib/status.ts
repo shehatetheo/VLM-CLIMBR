@@ -76,7 +76,7 @@ export function climbStatus(s: Session): StatusRead {
   if (s.toppedOut && s.finalHoldId != null) {
     const held = matchSeconds(s, s.finalHoldId)
     if (held >= R.topHoldSeconds || (held > 0 && cutOff) || s.kind === 'example') {
-      return { status: 'sent', title: 'you sent it', detail: `Both hands on the top hold${s.elapsed != null ? ` at ${s.elapsed.toFixed(1)}s` : ''}. That is a send.`, time: s.elapsed ?? undefined }
+      return { status: 'sent', title: 'you sent it', detail: `Both hands on the top hold${s.elapsed != null ? ` at ${s.elapsed.toFixed(1)}s` : ''}. That is a send. Take a bow.`, time: s.elapsed ?? undefined }
     }
   }
 
@@ -86,14 +86,14 @@ export function climbStatus(s: Session): StatusRead {
   const nearTop = reached ? reached.rank >= reached.of - 1 : false
 
   // Unclear: the clip does not show the ending.
-  if (!s.moves.length) return { status: 'unclear', title: 'we couldn’t tell', detail: 'We could not see you on the holds in this clip. Try filming from further back, with your whole body and the whole route in the frame.', ending: 'unknown' }
+  if (!s.moves.length) return { status: 'unclear', title: 'we couldn’t tell', detail: 'We could not spot you on the holds in this clip. Step the camera back so your whole body and the whole route fit in the frame, and we will be all eyes.', ending: 'unknown' }
   const unseen = handsUnseen(s, lastEnd)
   if (unseen >= R.unseenShare || (cutOff && nearTop)) {
     return {
       status: 'unclear', title: 'we couldn’t tell', time: lastEnd, reached, ending: cutOff ? 'cut-off' : 'unknown',
       detail: cutOff
-        ? 'The video ended while you were still near the top, so we could not tell if you topped out. Keep filming until you are back on the ground next time.'
-        : 'We lost sight of your hands near the end, so we could not tell if you topped out. Try filming the whole route with your whole body in the frame.',
+        ? 'The video ended while you were still near the top, so the ending is a mystery. Keep filming until your feet are back on the mat.'
+        : 'Your hands slipped out of view near the end, so we could not call the top-out. Fit the whole route and your whole body in the frame next time.',
     }
   }
 
@@ -102,9 +102,9 @@ export function climbStatus(s: Session): StatusRead {
   let cause = ''
   const before = hipsAt(s, lastEnd - 1), at = hipsAt(s, lastEnd), after = hipsAt(s, lastEnd + 0.6)
   if (at && after && (after[1] - at[1]) / 0.6 > R.fallSpeed) ending = 'fell'
-  if (before && at && Math.abs(at[0] - before[0]) > R.swing) cause = ` Your hips swung ${at[0] > before[0] ? 'right' : 'left'} just before, which pulls you off the wall: keep them close on that move.`
-  const how = ending === 'fell' ? 'you came off the wall' : ending === 'cut-off' ? 'the video ended' : 'you let go or stepped off'
-  const where = reached ? `You made it to hold ${reached.rank} of ${reached.of}${reached.rank >= reached.of ? ', the top hold. Match it and hold on a second longer next time.' : reached.rank === reached.of - 1 ? ', one hold from the top.' : '.'}` : 'You got on the wall.'
+  if (before && at && Math.abs(at[0] - before[0]) > R.swing) cause = ` Your hips swung ${at[0] > before[0] ? 'right' : 'left'} just before, which peels you off the wall. Keep them close on that move and it is yours.`
+  const how = ending === 'fell' ? 'gravity caught up with you' : ending === 'cut-off' ? 'the video ended' : 'you let go or stepped off'
+  const where = reached ? `You made it to hold ${reached.rank} of ${reached.of}${reached.rank >= reached.of ? ', the top hold. Match it and hang on one more second next time: the send is right there.' : reached.rank === reached.of - 1 ? ', one hold from glory.' : '.'}` : 'You got on the wall, and that is step one.'
   const limb = lastHand ? ` Your ${LIMB_BY_KEY[lastHand.limb].name} was the last to move.` : ''
   return { status: 'unfinished', title: 'so close', time: lastEnd, reached, ending, detail: `${where} At ${lastEnd.toFixed(1)}s ${how}.${ending === 'cut-off' ? '' : limb}${cause}` }
 }
