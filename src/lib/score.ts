@@ -259,15 +259,18 @@ export function coachInsights(s: Session): Insight[] {
   // 1 · hesitation
   const ps = pauses(s)
   const typical = Math.min(R.pause, median(ps.map((p) => p.gap)) || R.pause)
-  for (const p of ps.filter((x) => x.gap > R.pause).slice(0, 2)) {
+  // Two pauses never get the same joke.
+  const QUIPS = ['Nice view, pricey rent.', 'Your forearms would like a word.']
+  const TIPS = ['Read this move from the ground, so when you get here your body already knows the answer.', 'Plan the next two moves before you leave the ground, then climb straight through this spot.']
+  for (const [n, p] of ps.filter((x) => x.gap > R.pause).slice(0, 2).entries()) {
     const holds = handsAt(s, p.from)
     const where = holds.length ? `on ${describeHold(s, holds[holds.length - 1])}` : 'on the wall'
     const lost = p.gap - typical
     fixes.push({
       id: `pause-${p.from.toFixed(2)}`, kind: 'fix', time: p.from, holds, cost: lost, costLabel: `about ${secs(lost, 1)}`,
       title: `At ${at(p.from)} you took a ${secs(p.gap, 1)} breather ${where}.`,
-      body: `Nothing moved until ${at(p.to)}: about ${secs(lost, 1)} of hanging out on your arms. Nice view, pricey rent.`,
-      tip: 'Read this move from the ground, so when you get here your body already knows the answer.',
+      body: `Nothing moved until ${at(p.to)}: about ${secs(lost, 1)} of hanging out on your arms. ${QUIPS[n]}`,
+      tip: TIPS[n],
       ref: refOf(holds), short: `The easiest time to win back: about ${secs(lost, 1)} spent pausing ${where}.`,
     })
   }
