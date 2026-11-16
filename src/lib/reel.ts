@@ -92,6 +92,13 @@ const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const mix = (a: Rect, b: Rect, k: number): Rect => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), w: lerp(a.w, b.w, k), h: lerp(a.h, b.h, k) })
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+/** The rect that fills `r` at this aspect, overflowing on one axis. */
+function cover(r: Rect, aspect: number): Rect {
+  const w = Math.max(r.w, r.h * aspect), h = w / aspect
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h }
+}
+/** How much of the picture each side loses when it fills `r` (0.05 = 5%). */
+const coverCrop = (r: Rect, aspect: number) => { const c = cover(r, aspect); return Math.max(c.w - r.w, c.h - r.h) / 2 / Math.max(c.w, c.h) }
 const fit = (box: Rect, aspect: number): Rect => {
   const w = Math.min(box.w, box.h * aspect), h = w / aspect
   return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h }
@@ -113,7 +120,9 @@ function layout(R: Reel, W: number, H: number, clipAspect: number) {
       clip = { x: top.x, y: top.y, w: top.w, h: Math.min(top.h * 0.55, top.w / clipAspect) }
       map = { x: top.x, y: clip.y + clip.h + gap, w: top.w, h: top.h - clip.h - gap }
     } else {
-      const cw = Math.min((top.w - gap) / 2, top.h * clipAspect)
+      // A tall clip gets the wider column and fills it (drawReel crops its
+      // sides a touch), so the clip and the wall end on the same line.
+      const cw = Math.min(top.w * 0.6, top.h * clipAspect)
       clip = { x: top.x, y: top.y, w: cw, h: top.h }
       map = { x: top.x + cw + gap, y: top.y, w: top.w - cw - gap, h: top.h }
     }
@@ -181,15 +190,16 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   if (k < 1) {
     ctx.save()
     ctx.globalAlpha = 1 - k
-    const box = fit(L.clip, frameAspect)
-    if (L.portrait && frameAspect <= 1) box.y = L.clip.y
-    roundClip(ctx, box, 18 * u)
+    const fill = L.portrait && frameAspect <= 1 && coverCrop(L.clip, frameAspect) <= 0.12
+    const panel = fill ? L.clip : fit(L.clip, frameAspect)
+    const box = fill ? cover(L.clip, frameAspect) : panel
+    roundClip(ctx, panel, 18 * u)
     ctx.fillStyle = '#000'
-    ctx.fillRect(box.x, box.y, box.w, box.h)
+    ctx.fillRect(panel.x, panel.y, panel.w, panel.h)
     if (frame) ctx.drawImage(frame, box.x, box.y, box.w, box.h)
     drawClipOverlay(ctx, R, box, t, u * (box.h / (L.portrait ? 900 : 880)), route)
     ctx.restore()
-    chromeFrame(ctx, box, 18 * u, u, 1 - k)
+    chromeFrame(ctx, panel, 18 * u, u, 1 - k)
   }
 
   // ── the wall ──
@@ -320,7 +330,9 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
   roundClip(ctx, panel, 18 * u)
   ctx.fillStyle = '#07090b'
   ctx.fillRect(panel.x, panel.y, panel.w, panel.h)
-  const box = fit({ x: panel.x + 10 * u, y: panel.y + 10 * u, w: panel.w - 20 * u, h: panel.h - 20 * u }, aspect)
+  const finale = f >= 0
+  const head = (finale ? 92 : 78) * u // the heading has its own room above the wall
+  const box = fit({ x: panel.x + 10 * u, y: panel.y + head, w: panel.w - 20 * u, h: panel.h - head - 10 * u }, aspect)
   const C = (p: Vec2): Vec2 => [box.x + p[0] * box.w, box.y + p[1] * box.h]
   const px = Math.max(0.6, box.h / 900) * u // strokes scale with the wall as it is drawn
 
@@ -333,9 +345,8 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
     ctx.restore()
   }
 
-  const finale = f >= 0
-  const lit = new Set(tl.litAt(t))
   const tc = Math.max(0, Math.min(t, tl.climbEnd))
+  const lit = new Set(tl.litAt(tc)) // the same clock as the numbers below
   const holdingNow = new Map(LIMBS.map((l) => [l.key, finale ? null : tl.limbAt(l.key, tc).holdId] as const))
   const heldBy = new Map<number, LimbKey[]>()
   for (const [limb, id] of holdingNow) if (id != null) heldBy.set(id, [...(heldBy.get(id) ?? []), limb])
