@@ -20,7 +20,7 @@ async function setup(clipSeconds: number, frameAspect: number) {
   const [wall, art] = await Promise.all([s.wall?.src ? image(s.wall.src) : null, loadReelArt()])
   if (!art.logo) throw new Error('The logo did not load')
   await document.fonts.ready
-  const R = prepareReel(s, buildTimeline(s), clipSeconds, wall, art)
+  const R = prepareReel(s, buildTimeline(s), clipSeconds, wall, { ...art, bareClip: q.has('bare') })
   const [W, H] = REEL_SIZE[format]
   const canvas = document.getElementById('c') as HTMLCanvasElement
   canvas.width = W
@@ -38,7 +38,7 @@ async function setup(clipSeconds: number, frameAspect: number) {
     /** The credits card at progress p (0..1), faded in over the reel's last frame. */
     credits(p: number, seconds: number) {
       drawReel(ctx, R, null, frameAspect, R.total, W, H)
-      drawCredits(ctx, W, H, p * seconds, art.logo, s.climber ?? null)
+      drawCredits(ctx, W, H, p * seconds, art.logo, s.climber ?? null, (q.get('theme') ?? 'lime'))
       return canvas.toDataURL('image/png')
     },
   }
@@ -47,18 +47,19 @@ async function setup(clipSeconds: number, frameAspect: number) {
 const FONT = "'Selawik', 'Open Sans Variable', system-ui, sans-serif"
 const ease = (x: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3)
 /** Who made it possible. `t` is seconds into the card. */
-function drawCredits(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, logo: HTMLImageElement | null, climber: string | null) {
+function drawCredits(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, logo: HTMLImageElement | null, climber: string | null, theme: string) {
   const u = Math.min(W, H) / 1080
-  const accent = '#9be36a'
+  const dusk = theme === 'dusk'
+  const accent = dusk ? '#c9bdf5' : '#9be36a'
   // the page, fading in over the reel
   ctx.save()
   ctx.globalAlpha = ease(t / 0.5)
   const bg = ctx.createLinearGradient(0, 0, 0, H)
-  bg.addColorStop(0, '#1f4214'); bg.addColorStop(0.5, '#0b1808'); bg.addColorStop(1, '#040803')
+  if (dusk) { bg.addColorStop(0, '#312a64'); bg.addColorStop(0.5, '#16132e'); bg.addColorStop(1, '#08071a') } else { bg.addColorStop(0, '#1f4214'); bg.addColorStop(0.5, '#0b1808'); bg.addColorStop(1, '#040803') }
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, W, H)
   const glow = ctx.createRadialGradient(W / 2, H * 0.36, 0, W / 2, H * 0.36, W * 0.8)
-  glow.addColorStop(0, 'rgba(155,227,106,0.28)'); glow.addColorStop(1, 'rgba(0,0,0,0)')
+  glow.addColorStop(0, dusk ? 'rgba(185,165,255,0.28)' : 'rgba(155,227,106,0.28)'); glow.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
   ctx.restore()

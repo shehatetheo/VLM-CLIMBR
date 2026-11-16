@@ -66,9 +66,11 @@ export interface Reel {
   status: StatusRead
   look: Look
   logo: HTMLImageElement | null
+  /** The clip already has the skeleton drawn into it: do not draw it again. */
+  bareClip: boolean
 }
 
-export function prepareReel(s: Session, tl: Timeline, clip: number, wall: CanvasImageSource | null, art: { logo?: HTMLImageElement | null } = {}): Reel {
+export function prepareReel(s: Session, tl: Timeline, clip: number, wall: CanvasImageSource | null, art: { logo?: HTMLImageElement | null; bareClip?: boolean } = {}): Reel {
   const order = [...tl.firstUse.entries()].sort((a, b) => a[1].time - b[1].time).map(([id, f]) => ({ id, time: f.time, color: holdFill(s, id) }))
   const torso = (s.torso ?? []).filter((p) => p[0] >= 0 && p[0] <= tl.climbEnd)
   const step = order.length > 14 ? 0.22 : 0.32
@@ -84,7 +86,7 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
   }
   const insights = coachInsights(s)
   const line = insights.find((i) => i.kind === 'fix')?.short ?? insights.find((i) => i.kind === 'good')?.title ?? verdict(s, insights)
-  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status: climbStatus(s), look: currentLook(), logo: art.logo ?? null }
+  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status: climbStatus(s), look: currentLook(), logo: art.logo ?? null, bareClip: art.bareClip ?? false }
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -291,8 +293,8 @@ function drawClipOverlay(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, t: n
     ctx.strokeStyle = h.held ? '#fff' : route
     ctx.stroke()
   }
-  if (ov.joints) drawSkeleton(ctx, ov.joints.map((j) => ({ p: P(j.p), ok: j.c >= DRAW_MIN_CONFIDENCE })), ov.holding, px)
-  for (const { key, p } of ov.fallbackLimbs) dot(ctx, P(p), 8 * px, LIMB_BY_KEY[key].color, px)
+  if (ov.joints && !R.bareClip) drawSkeleton(ctx, ov.joints.map((j) => ({ p: P(j.p), ok: j.c >= DRAW_MIN_CONFIDENCE })), ov.holding, px)
+  if (!R.bareClip) for (const { key, p } of ov.fallbackLimbs) dot(ctx, P(p), 8 * px, LIMB_BY_KEY[key].color, px)
 }
 
 function drawSkeleton(ctx: CanvasRenderingContext2D, J: { p: Vec2; ok: boolean }[], holding: Map<LimbKey, number | null> | null, px: number) {
