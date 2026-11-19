@@ -66,6 +66,8 @@ export interface Reel {
   status: StatusRead
   look: Look
   logo: HTMLImageElement | null
+  /** The wall, tiny: drawn large, it is the out-of-focus fill behind the scan. */
+  wallSoft: HTMLCanvasElement | null
   /** The clip already has the skeleton drawn into it: do not draw it again. */
   bareClip: boolean
 }
@@ -89,7 +91,38 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
   }
   const insights = coachInsights(s)
   const line = insights.find((i) => i.kind === 'fix')?.short ?? insights.find((i) => i.kind === 'good')?.title ?? verdict(s, insights)
-  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status, look: currentLook(), logo: art.logo ?? null, bareClip: art.bareClip ?? false }
+  const { plate, soft } = dressWall(wall)
+  return { s, tl, clip, finale, total: clip + finale.total, wall: plate, wallSoft: soft, order, torso, meters, score: coachScore(s), line, status, look: currentLook(), logo: art.logo ?? null, bareClip: art.bareClip ?? false }
+}
+
+/** The wall plate, dressed for the reel: its edges feathered so it melts into
+ *  the fill behind it, and a tiny copy that, drawn large, is that fill. */
+function dressWall(wall: CanvasImageSource | null): { plate: CanvasImageSource | null; soft: HTMLCanvasElement | null } {
+  if (!wall || typeof document === 'undefined') return { plate: wall, soft: null }
+  const iw = (wall as HTMLImageElement).naturalWidth || (wall as HTMLCanvasElement).width, ih = (wall as HTMLImageElement).naturalHeight || (wall as HTMLCanvasElement).height
+  if (!iw || !ih) return { plate: wall, soft: null }
+  const soft = document.createElement('canvas')
+  soft.width = 28
+  soft.height = Math.max(2, Math.round((28 * ih) / iw))
+  const sc = soft.getContext('2d')!
+  sc.imageSmoothingQuality = 'high'
+  sc.drawImage(wall, 0, 0, soft.width, soft.height)
+  const plate = document.createElement('canvas')
+  plate.width = iw
+  plate.height = ih
+  const pc = plate.getContext('2d')!
+  pc.drawImage(wall, 0, 0)
+  pc.globalCompositeOperation = 'destination-in'
+  const fx = iw * 0.07, fy = ih * 0.05
+  const gx = pc.createLinearGradient(0, 0, iw, 0)
+  gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(fx / iw, '#000'); gx.addColorStop(1 - fx / iw, '#000'); gx.addColorStop(1, 'rgba(0,0,0,0)')
+  pc.fillStyle = gx
+  pc.fillRect(0, 0, iw, ih)
+  const gy = pc.createLinearGradient(0, 0, 0, ih)
+  gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(fy / ih, '#000'); gy.addColorStop(1 - fy / ih, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)')
+  pc.fillStyle = gy
+  pc.fillRect(0, 0, iw, ih)
+  return { plate, soft }
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -360,9 +393,19 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
   const C = (p: Vec2): Vec2 => [box.x + p[0] * box.w, box.y + p[1] * box.h]
   const px = Math.max(0.6, box.h / 900) * u // strokes scale with the wall as it is drawn
 
+  if (R.wallSoft) {
+    // The wall fills its whole panel: out of focus behind, the scan itself on top.
+    ctx.save()
+    ctx.globalAlpha = 0.36
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    const c = cover(panel, R.wallSoft.width / R.wallSoft.height)
+    ctx.drawImage(R.wallSoft, c.x - c.w * 0.04, c.y - c.h * 0.04, c.w * 1.08, c.h * 1.08)
+    ctx.restore()
+  }
   if (R.wall) {
     ctx.save()
-    ctx.globalAlpha = 0.62
+    ctx.globalAlpha = R.wallSoft ? 0.74 : 0.62
     const m = invertAffine(s.wall?.affine ?? IDENTITY)
     ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([box.w * m[0][0], box.h * m[1][0], box.w * m[0][1], box.h * m[1][1], box.x + box.w * m[0][2], box.y + box.h * m[1][2]])))
     ctx.drawImage(R.wall, 0, 0, 1, 1)
