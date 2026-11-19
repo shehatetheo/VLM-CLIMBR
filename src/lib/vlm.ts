@@ -67,6 +67,8 @@ export interface AnalyzeResult {
   id: string
   color: string // the route color the holds were read for: the one picked, unless the climber was plainly on another
   prompt: string
+  /** Every hold on the wall (any color), when the camera moved: fixed points for steadying it. */
+  anchors?: SamResult | null
   colorCheck?: { asked: string; used?: string; tracks: number; touches: { count: number; holds: number }; guesses: { color: string; share: number; lift: number }[]; tried: { color: string; tracks: number; touches: { count: number; holds: number } }[] } | null
   source: SourceMeta
   analysis: ClipMeta

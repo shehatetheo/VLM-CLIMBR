@@ -343,7 +343,20 @@ export function sampleFrames(file, n = 8, width = 448) {
 
 // The label maps are full-resolution PNGs, one per sampled frame. CLIMBR reads
 // SAM's polygons instead, so the masks stop here.
-function stripMasks(payload) {
+/** Did the camera move? On a tripod a hold's centre stays put all clip long. */
+function cameraMoved(sam) {
+  const by = new Map()
+  for (const d of sam.detections) {
+    const c = [d.bbox[0] + d.bbox[2] / 2, d.bbox[1] + d.bbox[3] / 2]
+    by.set(d.track, [...(by.get(d.track) ?? []), c])
+  }
+  const ranges = [...by.values()].filter((l) => l.length >= 5).map((l) => Math.max(
+    Math.max(...l.map((c) => c[0])) - Math.min(...l.map((c) => c[0])), Math.max(...l.map((c) => c[1])) - Math.min(...l.map((c) => c[1]))))
+    .sort((a, b) => a - b)
+  return ranges.length > 0 && ranges[ranges.length >> 1] > 0.05
+}
+
+export function stripMasks(payload) {
   const frames = payload?.content?.frames
   if (Array.isArray(frames)) for (const f of frames) delete f.mask
   return payload
@@ -530,6 +543,20 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
         })
       }
     }
+    // ── a camera that moved gets more fixed points ──
+    // The route's own holds are few, and SAM hands a track on to another hold
+    // once the first leaves the picture. Every hold on the wall, whatever its
+    // color, is a fixed point too: one more pass finds them, and the browser
+    // steadies the camera against all of them. They are never counted as route holds.
+    let anchors = null
+    if (cameraMoved(sam) && !signal?.aborted && (!ON_VERCEL || Date.now() - t0 < 170_000)) {
+      stage('segmenting', 'running', { detail: 'The camera moved: finding every hold on the wall to steady it' })
+      try {
+        anchors = (await track('climbing hold', '.anchors')).sam
+        run.anchors = { tracks: anchors.tracks, detections: anchors.detections.length }
+      } catch (e) { log('anchors', e.message) }
+      stage('segmenting', 'done', { detail: `${sam.tracks} ${used} hold track${sam.tracks === 1 ? '' : 's'}${anchors ? ` · camera steadied on ${anchors.tracks} more` : ''}` })
+    }
     const warnings = [...sam.warnings, ...pose.warnings,
       ...[...sam.checks, ...pose.checks].filter((c) => !c.ok).map((c) => `Gateway ${c.name} mismatch: ${c.detail}.`)]
     run.warnings = warnings
@@ -550,6 +577,7 @@ export async function analyzeFile(file, { color = 'green', prompt: promptIn, nam
       analysis: A,
       playback: { ...media.playback, src: urls.playback, webm: urls.webm ?? null, poster: urls.poster },
       sam,
+      anchors,
       pose,
       usage: { holds: segR.value.usage, pose: poseR.value.usage },
       warnings,

@@ -44,12 +44,17 @@ export const CFG = {
   FINAL_DWELL_DECAY: 0,
   // A hand-held camera, as the pipeline's camera path reads it:
   HOLD_REJECT_RADIUS: 2.5, // a sighting this many of its hold's sizes from the rest is a track switching holds
+  HOLD_BLOWUP: 5, // a sighting whose box is this many times the hold's usual box is a mask gone wrong
+  REGRIP_GAP_SECONDS: 1.2, // a limb back on the same hold within this is one grip; later, it is a new one
+  LIFT_OFF: 0.25, // feet are off the floor once both ankles rose this much, in leg lengths
+  MATCH_REACH: 0.12, // palms this close (in body heights) are hands together
+  HAND_REACH: 0.3, // the palm sits this far past the wrist, in forearm lengths
   HOLD_MERGE_IOU: 0.6, // two tracks this much on top of each other on the canvas are one hold…
   HOLD_MERGE_DISTANCE: 1, // …or never in view together, alike in size, and centres within one hold size
   HOLD_SPATIAL_MARGIN: 0.08, // frame heights around where the climber's body went; green further out is another route
 }
 
-const KPT = { lShoulder: 5, rShoulder: 6, lWrist: 9, rWrist: 10, lHip: 11, rHip: 12, lAnkle: 15, rAnkle: 16 }
+const KPT = { lShoulder: 5, rShoulder: 6, lElbow: 7, rElbow: 8, lWrist: 9, rWrist: 10, lHip: 11, rHip: 12, lAnkle: 15, rAnkle: 16 }
 const LIMB_KPT: Record<LimbKey, number> = { left_hand: KPT.lWrist, right_hand: KPT.rWrist, left_foot: KPT.lAnkle, right_foot: KPT.rAnkle }
 const TORSO = [KPT.lShoulder, KPT.rShoulder, KPT.lHip, KPT.rHip]
 
@@ -59,6 +64,9 @@ export interface ReadInput {
   /** The analyzed frame: its size (for the aspect) and the clip's length. */
   frame: { width: number; height: number; duration: number }
   color: string
+  /** Every hold on the wall, whatever its color (a second SAM 3.1 pass): more
+   *  fixed points to steady a moving camera against. Never counted as route holds. */
+  anchors?: SamResult
 }
 
 export interface ReadStats {
@@ -80,7 +88,7 @@ export interface ReadStats {
   framesRead: number // climber frames with the holds placed
   contacts: number
   moves: number
-  start: 'both feet on holds' | 'first contact' | 'none'
+  start: 'both feet on holds' | 'first contact' | 'feet off the floor' | 'none'
   toppedOut: boolean
 }
 
@@ -101,13 +109,13 @@ export interface Reading {
 
 interface Track {
   id: number
-  sightings: { sample: number; t: number; poly: Vec2[]; area: number; h: number; score: number; whole: boolean }[]
+  sightings: { sample: number; t: number; poly: Vec2[]; area: number; box: number; h: number; score: number; whole: boolean }[]
   score: number
   appearance: number
   iso?: Vec2[] // outline on the canvas, isotropic units
 }
 
-export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
+export function readRoute({ sam, pose, frame, color, anchors }: ReadInput): Reading {
   const warnings: string[] = []
   const aspect = frame.width / frame.height
   if (!(aspect > 0 && Number.isFinite(aspect))) throw new Error(`The analyzed frame has no size (${frame.width}×${frame.height}).`)
@@ -117,6 +125,7 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
 
   // ── hold tracks ────────────────────────────────────────────────────────────
   const byTrack = new Map<number, Track>()
+  let blownUp = 0
   for (const d of sam.detections) {
     if (d.score != null && d.score < CFG.HOLD_MIN_SCORE) continue
     const sample = sampleOf.get(d.frame)
@@ -124,7 +133,7 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
     const [x, y, w, h] = d.bbox
     const poly: Vec2[] = d.polygon ?? [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
     const tr = byTrack.get(d.track) ?? { id: d.track, sightings: [], score: 0, appearance: 0 }
-    tr.sightings.push({ sample, t: d.t, poly, area: polygonArea(poly), h, score: d.score ?? 1, whole: true })
+    tr.sightings.push({ sample, t: d.t, poly, area: polygonArea(poly), box: w * h, h, score: d.score ?? 1, whole: true })
     byTrack.set(d.track, tr)
   }
   let tracks = [...byTrack.values()].filter((tr) => {
@@ -133,6 +142,11 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
     return tr.sightings.length >= CFG.HOLD_MIN_SIGHTINGS || tr.appearance >= CFG.HOLD_MIN_APPEARANCE
   })
   for (const tr of tracks) {
+    // Now and then SAM's mask for a hold floods across the wall for one sample.
+    // A hold cannot grow several times over between samples: drop those.
+    const box = median(tr.sightings.map((s) => s.box))
+    const kept = tr.sightings.filter((s) => s.box <= CFG.HOLD_BLOWUP * box)
+    if (kept.length >= 2 && kept.length < tr.sightings.length) { blownUp += tr.sightings.length - kept.length; tr.sightings = kept }
     // Seen whole: not shrunk by a hand or a foot over it.
     const mid = median(tr.sightings.map((s) => s.area))
     for (const s of tr.sightings) s.whole = s.area >= 0.6 * mid
@@ -148,25 +162,80 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
   // ── the camera ─────────────────────────────────────────────────────────────
   // Small holds place the camera best: a volume's centre wanders with whatever
   // part of it is in view, and a hold under a hand has a shrunken mask.
+  // The other holds on the wall, as fixed points only.
+  const anchorSightings: Sighting[] = []
+  if (anchors) {
+    const groups = new Map<number, { sample: number; c: Vec2; area: number; h: number; score: number }[]>()
+    for (const d of anchors.detections) {
+      const sample = sampleOf.get(d.frame)
+      if (sample == null || (d.score != null && d.score < CFG.HOLD_MIN_SCORE)) continue
+      const [x, y, w, h] = d.bbox
+      const poly: Vec2[] = d.polygon ?? [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+      // A hold cut by the frame's edge has its centre in the wrong place.
+      if (x < 0.01 || y < 0.01 || x + w > 0.99 || y + h > 0.99) continue
+      groups.set(d.track, [...(groups.get(d.track) ?? []), { sample, c: centroid(poly), area: w * h, h, score: d.score ?? 1 }])
+    }
+    for (const [track, list] of groups) {
+      const mid = median(list.map((s) => s.area))
+      for (const s of list) {
+        if (s.area > CFG.HOLD_BLOWUP * mid || s.area < 0.6 * mid) continue // flooded, or half hidden
+        const size = Math.max(s.h, holdUnitV) / holdUnitV
+        anchorSightings.push({ track: 1_000_000 + track, sample: s.sample, c: s.c, w: s.score / (size * size), size: s.h })
+      }
+    }
+  }
+  /** What each route sighting was labelled, from the last registration. */
+  let labelOf = new Map<Track['sightings'][number], number>()
   const register = (list: Track[]) => {
     const sightings: Sighting[] = []
+    const owner: Track['sightings'][number][] = []
     for (const tr of list) {
       const mid = median(tr.sightings.map((s) => s.area))
       for (const s of tr.sightings) {
         const size = Math.max(s.h, holdUnitV) / holdUnitV
         const cover = s.whole ? 1 : (s.area / mid) ** 2
         sightings.push({ track: tr.id, sample: s.sample, c: centroid(s.poly), w: (s.score * cover) / (size * size), size: s.h })
+        owner.push(s)
       }
     }
-    return registerCamera(sightings, sampleTimes, aspect, holdUnitV)
+    const r = registerCamera([...sightings, ...anchorSightings], sampleTimes, aspect, holdUnitV)
+    labelOf = new Map(owner.map((s, k) => [s, r.labels[k]]))
+    return r
   }
   let reg = register(tracks)
+  let split = 0
   const dropMoving = () => {
     if (!reg.moving.length) return
     warnings.push(`${reg.moving.length} ${color} track${reg.moving.length > 1 ? 's' : ''} moved against the wall and ${reg.moving.length > 1 ? 'were' : 'was'} not counted as ${reg.moving.length > 1 ? 'holds' : 'a hold'}.`)
     tracks = tracks.filter((tr) => !reg.moving.includes(tr.id))
   }
   dropMoving()
+  // SAM hands a track on to another hold once the first leaves the picture: on
+  // a camera that follows the climber, one track can be three holds in turn.
+  // Each spot it settled on is its own hold.
+  if (reg.mode === 'handheld') {
+    let nextId = Math.max(0, ...tracks.map((tr) => tr.id)) + 1
+    const out: Track[] = []
+    for (const tr of tracks) {
+      const groups = new Map<number, Track['sightings']>()
+      for (const s of tr.sightings) {
+        const l = labelOf.get(s) ?? -1
+        if (l >= 0) groups.set(l, [...(groups.get(l) ?? []), s])
+      }
+      const parts = [...groups.values()].filter((g) => g.length >= CFG.HOLD_MIN_SIGHTINGS).sort((a, b) => b.length - a.length)
+      if (parts.length <= 1) { if (parts.length) tr.sightings = parts[0]; out.push(tr); continue }
+      parts.forEach((g, i) => {
+        const part: Track = { ...tr, id: i ? nextId++ : tr.id, sightings: g }
+        const mid = median(g.map((s) => s.area))
+        for (const s of g) s.whole = s.area >= 0.6 * mid
+        part.appearance = new Set(g.map((s) => s.sample)).size / Math.max(1, samples.length)
+        part.score = g.reduce((t, s) => t + s.score, 0) / g.length
+        out.push(part)
+      })
+      split += parts.length - 1
+    }
+    if (split) { tracks = out; reg = register(tracks) }
+  }
   // A hold is bolted down, so all its sightings land on one spot of the canvas.
   // One that lands far from the rest is SAM handing the track to another hold.
   let switched = 0
@@ -386,6 +455,14 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
   let completion: number | null = null, finalDwell = 0
   let framesRead = 0
 
+  // ViTPose+ marks the wrist; the hold is under the palm and fingers, a little
+  // further along the forearm's line.
+  const palmAt = (i: number, key: 'left_hand' | 'right_hand'): Vec2 | null => {
+    const w = key === 'left_hand' ? KPT.lWrist : KPT.rWrist, el = key === 'left_hand' ? KPT.lElbow : KPT.rElbow
+    if (!ok(i, w)) return null
+    const [x, y] = K[i][w]
+    return ok(i, el) ? [x + CFG.HAND_REACH * (x - K[i][el][0]), y + CFG.HAND_REACH * (y - K[i][el][1])] : [x, y]
+  }
   for (let i = 0; i < climber.length; i++) {
     const t = T[i], k = K[i]
     if (i && t - T[i - 1] > CFG.POSE_GAP_SECONDS) for (const l of LIMBS) close(l.key)
@@ -419,7 +496,8 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
     for (const limb of LIMBS) {
       const key = limb.key, kp = LIMB_KPT[key], s = st[key]
       if (!ok(i, kp)) { close(key); continue }
-      const x = k[kp][0], y = k[kp][1] + (limb.hand ? 0 : toe)
+      let x = k[kp][0], y = k[kp][1] + (limb.hand ? 0 : toe)
+      if (limb.hand) [x, y] = palmAt(i, key as 'left_hand' | 'right_hand')!
       let chosen: number | null
       let d: number | null = null
       if (s.on != null && depth(s.on, x, y) >= -release) {
@@ -428,13 +506,23 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
         chosen = better != null && better !== s.on && depth(better, x, y) > cur ? better : s.on
         d = chosen === s.on ? cur : null
       } else chosen = bestHold(x, y, enter)
+      if (chosen == null && limb.hand) {
+        // Matching a small top hold, the second hand lands on the first hand,
+        // not on the hold: palms together there is on the hold too.
+        const ok2 = key === 'left_hand' ? 'right_hand' : 'left_hand', o = st[ok2], op = palmAt(i, ok2)
+        if (o.on === finalHold && o.confirmed && op && Math.hypot((op[0] - x) * aspect, op[1] - y) <= CFG.MATCH_REACH * bodyH[i]) chosen = finalHold
+      }
       if (chosen == null) { close(key); continue }
       if (s.on !== chosen) { close(key); s.on = chosen; s.since = t; s.sinceIdx = i }
       s.held++
       s.last = t
       s.peak = Math.max(s.peak, d ?? depth(chosen, x, y))
       const need = chosen === finalHold ? finalTouch : dwell
-      if (!s.confirmed && s.held >= need && (s.peak >= -grazeDepth || s.held >= grazeFrames)) {
+      // Matching the top hold, the second hand often lands on the first one's
+      // fingers, at the hold's edge: with one hand already on it, half a second there counts.
+      const other = st[key === 'left_hand' ? 'right_hand' : 'left_hand']
+      const matching = limb.hand && chosen === finalHold && other.on === finalHold && other.confirmed && s.held >= finalFrames
+      if (!s.confirmed && s.held >= need && (s.peak >= -grazeDepth || s.held >= grazeFrames || matching)) {
         s.confirmed = true
         if (!activatedAt.has(chosen)) activatedAt.set(chosen, t)
       }
@@ -483,6 +571,32 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
       warnings.push('The climb clock starts at the first hand hold: the feet were off the route holds until late in the climb.')
     }
   }
+  // Standing with the hands already on the start hold is not climbing yet. When
+  // the clock would start at a hand contact, move it to the moment both feet
+  // left the floor: each ankle clearly above where it stood, and staying there.
+  if (startSource === 'first contact' && startT != null) {
+    const firstFoot = Math.min(Infinity, ...contacts.filter((c) => c.limb === 'left_foot' || c.limb === 'right_foot').map((c) => c.start))
+    const rows: { t: number; l: number; r: number; hip: number }[] = []
+    for (let i = 0; i < climber.length; i++) {
+      const m = toIsoAt(T[i])
+      if (!m || ![KPT.lAnkle, KPT.rAnkle, KPT.lHip, KPT.rHip].every((j) => ok(i, j))) continue
+      const y = (j: number) => applyM(m, [K[i][j][0], K[i][j][1]])[1]
+      rows.push({ t: T[i], l: y(KPT.lAnkle), r: y(KPT.rAnkle), hip: (y(KPT.lHip) + y(KPT.rHip)) / 2 })
+    }
+    const base = rows.filter((x) => x.t <= rows[0]?.t + 0.6)
+    if (base.length >= 3 && rows[0].t <= startT + 0.5) {
+      const l0 = median(base.map((x) => x.l)), r0 = median(base.map((x) => x.r)), leg = Math.max(l0, r0) - median(base.map((x) => x.hip))
+      const up = (x: (typeof rows)[number]) => l0 - x.l > CFG.LIFT_OFF * leg && r0 - x.r > CFG.LIFT_OFF * leg
+      const need = Math.max(2, Math.round(0.4 * fps))
+      for (let i = 0; leg > 0 && i + need <= rows.length; i++) {
+        if (rows[i].t >= firstFoot) break
+        if (rows.slice(i, i + need).every(up)) {
+          if (rows[i].t > startT) { startT = rows[i].t; startSource = 'feet off the floor' }
+          break
+        }
+      }
+    }
+  }
   if (completion == null) warnings.push('No top-out detected: both hands never held the top hold together.')
   if (!contacts.length) warnings.push('No contacts: no hand or foot stayed on a hold long enough to count.')
   // The climb runs to the top-out or, short of one, to the last moment a limb
@@ -498,7 +612,7 @@ export function readRoute({ sam, pose, frame, color }: ReadInput): Reading {
     const start = Math.max(c.start, lo), end = Math.min(c.end, hi)
     if (end < start) continue
     const prev = latest.get(c.limb)
-    if (prev && prev.holdId === c.holdId) { prev.end = Math.max(prev.end, end); continue }
+    if (prev && prev.holdId === c.holdId && start - prev.end <= CFG.REGRIP_GAP_SECONDS) { prev.end = Math.max(prev.end, end); continue }
     const e = { ...c, start, end }
     mergedC.push(e)
     latest.set(c.limb, e)

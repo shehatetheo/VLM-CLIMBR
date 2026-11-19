@@ -29,8 +29,11 @@ if (mode === 'result') {
   pose = normalizePose(rp, expect)
   frame = { width: expect.width, height: expect.height, duration: expect.duration }
 }
+(globalThis as any).DBG = process.env.DBG
 const t0 = performance.now()
-const r = readRoute({ sam, pose, frame, color })
+const anchors = mode === 'run' && !process.env.NO_ANCHORS && fs.existsSync(`${a}/anchors.json`) ? JSON.parse(fs.readFileSync(`${a}/anchors.json`, 'utf8')) : undefined
+if (process.env.COLOR) color = process.env.COLOR
+const r = readRoute({ sam, pose, frame, color, anchors })
 const ms = performance.now() - t0
 const out = { ms: Math.round(ms), outcome: r.outcome, stats: r.stats, canvas: r.canvas, start: r.start, end: r.end, warnings: r.warnings,
   holds: r.holds.map((h) => ({ id: h.id, track: (h.tracks as number[])[0], c: [h.bbox[0] + h.bbox[2] / 2, h.bbox[1] + h.bbox[3] / 2].map((v) => +v.toFixed(3)), h: +h.bbox[3].toFixed(3) })),

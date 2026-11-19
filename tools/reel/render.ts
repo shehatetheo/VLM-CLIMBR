@@ -6,6 +6,7 @@ import { loadBundled } from '../../src/lib/api'
 import { drawReel, loadReelArt, prepareReel, REEL_SIZE, type ReelFormat } from '../../src/lib/reel'
 import { applyTheme, type Mode, type Theme } from '../../src/lib/store'
 import { buildTimeline } from '../../src/lib/timeline'
+import { buildWallPlate } from '../../src/lib/wallplate'
 
 const q = new URLSearchParams(location.search)
 applyTheme((q.get('theme') ?? 'lime') as Theme, (q.get('mode') ?? 'dark') as Mode)
@@ -17,7 +18,9 @@ const image = (src: string) => new Promise<HTMLImageElement | null>((res) => { c
 async function setup(clipSeconds: number, frameAspect: number) {
   const s = await loadBundled(example)
   if (!s) throw new Error(`No bundled example "${example}"`)
-  const [wall, art] = await Promise.all([s.wall?.src ? image(s.wall.src) : null, loadReelArt()])
+  // A fresh wall plate at reel resolution, straight from the clip.
+  const plate = q.has('plate') ? await buildWallPlate(s, +(q.get('plate') || 720)) : null
+  const [wall, art] = await Promise.all([plate ? image(plate) : s.wall?.src ? image(s.wall.src) : null, loadReelArt()])
   if (!art.logo) throw new Error('The logo did not load')
   await document.fonts.ready
   const R = prepareReel(s, buildTimeline(s), clipSeconds, wall, { ...art, bareClip: q.has('bare') })
@@ -27,6 +30,7 @@ async function setup(clipSeconds: number, frameAspect: number) {
   canvas.height = H
   const ctx = canvas.getContext('2d')!
   return {
+    plate: plate ? await (await fetch(plate)).blob().then((b) => new Promise<string>((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.readAsDataURL(b) })) : null,
     total: R.total, clip: R.clip, offset: s.video?.offset ?? 0, climbEnd: R.tl.climbEnd, W, H,
     /** Draw reel time r over the given clip frame (a JPEG data URL) and return a PNG data URL. */
     async frame(r: number, jpeg: string | null) {

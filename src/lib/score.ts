@@ -67,7 +67,10 @@ export function regrabs(s: Session): Regrab[] {
     const ms = byLimb(s, l.key)
     ms.forEach((m, i) => {
       const prev = ms[i - 1], prev2 = ms[i - 2], next = ms[i + 1]
-      if (prev && prev.holdId === m.holdId) out.push({ move: m, kind: 'reset', lost: Math.max(0.2, m.time - (prev.time + prev.duration)) })
+      // Back on the hold it just left: a slip put right, if it was quick. Away
+      // for seconds (a flag, a smear, a rest) and back is just using the hold twice.
+      const away = prev && prev.holdId === m.holdId ? m.time - (prev.time + prev.duration) : null
+      if (away != null) { if (away <= 2.5) out.push({ move: m, kind: 'reset', lost: Math.max(0.2, away) }) }
       else if (prev2 && prev2.holdId === m.holdId) out.push({ move: m, kind: 'reversed', lost: clamp(m.time - prev.time, 0.2, 3) })
       else if (next && m.duration < SCORE_RULES.quickTouch) out.push({ move: m, kind: 'touch', lost: m.duration + 0.3 })
     })

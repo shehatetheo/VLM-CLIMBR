@@ -8,7 +8,6 @@ export type ClimbStatus = 'sent' | 'unfinished' | 'unclear'
 
 /** Every threshold in one place. */
 export const STATUS_RULES = {
-  topHoldSeconds: 1.0, // both hands must share the top hold this long for a send
   cutShort: 0.6, // seconds: a climb that ends this close to the end of the clip may have been cut off
   lowConfidence: 0.3, // a joint below this is not trusted
   unseenShare: 0.5, // the hands unseen for this share of the last 3 s makes the ending unclear
@@ -75,7 +74,9 @@ export function climbStatus(s: Session): StatusRead {
   // Sent: both hands on the top hold, and they stayed.
   if (s.toppedOut && s.finalHoldId != null) {
     const held = matchSeconds(s, s.finalHoldId)
-    if (held >= R.topHoldSeconds || (held > 0 && cutOff) || s.kind === 'example') {
+    // The reader only calls a top-out once both hands have stayed on the top
+    // hold, and it stops the climb's clock right there: any shared time is a send.
+    if (held > 0 || s.kind === 'example') {
       return { status: 'sent', title: 'you sent it', detail: `Both hands on the top hold${s.elapsed != null ? ` at ${s.elapsed.toFixed(1)}s` : ''}. That is a send. Take a bow.`, time: s.elapsed ?? undefined }
     }
   }

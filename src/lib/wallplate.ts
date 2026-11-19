@@ -33,7 +33,7 @@ function climberBox(s: Session, t: number): [number, number, number, number] | n
   }
   if (!Number.isFinite(x0)) return null
   // Joints are centres; the body, hair, shoes and chalk bag spill past them.
-  const padX = (x1 - x0) * 0.25 + 0.03, padY = (y1 - y0) * 0.12 + 0.03
+  const padX = (x1 - x0) * 0.3 + 0.045, padY = (y1 - y0) * 0.16 + 0.045
   return [x0 - padX, y0 - padY, x1 - x0 + 2 * padX, y1 - y0 + 2 * padY]
 }
 
@@ -75,9 +75,10 @@ export async function buildWallPlate(s: Session, width = 300): Promise<string | 
   // the camera is known, and more of them, since each covers only part of the wall.
   const offset = s.video?.offset ?? 0
   const lo = motion ? motion.t[0] : 0, hi = motion ? motion.t[motion.t.length - 1] : v.duration
-  const n = motion ? 36 : 12
+  const n = motion ? 48 : 12
   const times = Array.from({ length: n }, (_, i) => lo + ((i + 0.5) / n) * (hi - lo)).filter((t) => !motion || motionAt(motion, t))
   const layers: Uint8ClampedArray[] = []
+  const centres: [number, number][] = [] // each frame's middle, in plate pixels
   for (const t of times) {
     const toVideo: Affine | null = motion ? motionAt(motion, t) : (s.video?.affine ?? IDENTITY)
     if (!toVideo) continue
@@ -107,12 +108,48 @@ export async function buildWallPlate(s: Session, width = 300): Promise<string | 
     ctx.setTransform((W * A[0][0]) / fw, (H * A[1][0]) / fw, (W * A[0][1]) / fh, (H * A[1][1]) / fh, W * A[0][2], H * A[1][2])
     ctx.drawImage(frame, 0, 0)
     layers.push(ctx.getImageData(0, 0, W, H).data)
+    centres.push([W * (A[0][0] * 0.5 + A[0][1] * 0.5 + A[0][2]), H * (A[1][0] * 0.5 + A[1][1] * 0.5 + A[1][2])])
+  }
+  if (motion && layers.length > 6) {
+    // A frame caught mid-swing is a smear. Keep the crisp ones: detail is the
+    // average step between neighbouring pixels.
+    const detail = layers.map((L) => {
+      let sum = 0, n = 0
+      for (let p = 0; p + 1 < W * H; p += 3) {
+        if (L[p * 4 + 3] < 250 || L[p * 4 + 7] < 250) continue
+        sum += Math.abs(L[p * 4 + 1] - L[p * 4 + 5]); n++
+      }
+      return n ? sum / n : 0
+    })
+    const mid = [...detail].sort((a, b) => a - b)[detail.length >> 1]
+    for (let i = layers.length - 1; i >= 0; i--) if (detail[i] < 0.7 * mid) { layers.splice(i, 1); centres.splice(i, 1) }
   }
   if (layers.length < 3) return null
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   const out = ctx.createImageData(W, H)
   const buf = [0, 0, 0].map(() => new Array<number>(layers.length))
-  for (let p = 0; p < W * H; p++) {
+  // A camera that moved saw each patch of wall from a slightly different place
+  // every time, so the frames never line up to the pixel and a median smears
+  // them. There, each pixel comes from the frames that looked most squarely at
+  // it (its distance from the frame's middle), blended only where they meet.
+  const reach = Math.hypot(W, H)
+  for (let p = 0; motion && p < W * H; p++) {
+    const x = p % W, y = (p - x) / W
+    let near = Infinity
+    for (let i = 0; i < layers.length; i++) if (layers[i][p * 4 + 3] >= 250) near = Math.min(near, Math.hypot(x - centres[i][0], y - centres[i][1]))
+    let r = 0, g = 0, b = 0, sum = 0
+    for (let i = 0; i < layers.length && near < Infinity; i++) {
+      const L = layers[i]
+      if (L[p * 4 + 3] < 250) continue
+      // The nearest frame that saw this pixel, feathered into the next only where they tie.
+      const w = Math.exp(-(Math.hypot(x - centres[i][0], y - centres[i][1]) - near) / (0.012 * reach))
+      if (w < 0.01) continue
+      r += w * L[p * 4]; g += w * L[p * 4 + 1]; b += w * L[p * 4 + 2]; sum += w
+    }
+    out.data[p * 4] = sum ? r / sum : 12; out.data[p * 4 + 1] = sum ? g / sum : 12; out.data[p * 4 + 2] = sum ? b / sum : 12
+    out.data[p * 4 + 3] = 255
+  }
+  for (let p = 0; !motion && p < W * H; p++) {
     let k = 0
     for (const L of layers) {
       if (L[p * 4 + 3] < 250) continue

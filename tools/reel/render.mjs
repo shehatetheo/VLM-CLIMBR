@@ -24,7 +24,7 @@ const out = path.resolve(arg('out', `${example}-${format}-reel.mp4`))
 const FPS = 30
 const CREDITS = 3.6 // seconds
 
-const clipFile = path.join('public', 'examples', example, 'climb.mp4')
+const clipFile = arg('clip', path.join('public', 'examples', example, 'climb.mp4')) // --clip: a sharper copy of the same footage
 const probe = spawnSync(FFMPEG, ['-hide_banner', '-i', clipFile], { encoding: 'utf8' }).stderr
 const [, hh, mm, ss] = probe.match(/Duration: (\d+):(\d+):([\d.]+)/)
 const clipSeconds = +hh * 3600 + +mm * 60 + +ss
@@ -44,9 +44,11 @@ await server.listen()
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 400, height: 400 } })
 page.on('pageerror', (e) => console.error('page:', e.message))
-await page.goto(`http://localhost:5199/tools/reel/index.html?example=${example}&format=${format}&theme=${theme}${flag('bare') ? '&bare=1' : ''}`)
+await page.goto(`http://localhost:5199/tools/reel/index.html?example=${example}&format=${format}&theme=${theme}${flag('bare') ? '&bare=1' : ''}${arg('plate') ? `&plate=${arg('plate')}` : ''}`)
 await page.waitForFunction(() => window.reel)
 const info = await page.evaluate(([c, a]) => window.reel.setup(c, a).then((r) => { window.reel.ready = r; const { frame: _f, ...rest } = r; return rest }), [clipSeconds, +vw / +vh])
+if (info.plate && arg('save-plate')) fs.writeFileSync(arg('save-plate'), Buffer.from(info.plate.split(',')[1], 'base64'))
+delete info.plate
 console.log(`clip ${clipSeconds.toFixed(2)} s, climb from ${info.offset} s to ${(info.offset + info.climbEnd).toFixed(2)} s, reel ${info.total.toFixed(2)} s at ${info.W}x${info.H}`)
 
 const start = +arg('start', 0), cut = Math.min(+arg('cut', clipSeconds), clipSeconds)

@@ -120,14 +120,91 @@ export interface Registration {
   moving: number[]
   reference: number
   aspect: number
+  /** Per input sighting: which hold it really shows. SAM hands a track on to
+   *  another hold when the first leaves the picture; a label is one track on
+   *  one spot of the wall. -1: a stray (too few sightings there to trust). */
+  labels: number[]
+}
+
+/** Frame to frame, most holds in view move together; a track that jumped to
+ *  another hold does not. Fit the ones that agree. */
+function chainFit(pairs: { p: Vec2; q: Vec2; w: number }[], holdUnit: number): Sim | null {
+  let use = pairs
+  let fit = fitSim(use, SIM_I, 0.02)
+  for (let k = 0; k < 2 && fit && use.length > 2; k++) {
+    const err = use.map((x) => { const q = simApply(fit!, x.p); return Math.hypot(q[0] - x.q[0], q[1] - x.q[1]) })
+    const cut = Math.max(0.6 * holdUnit, 2.5 * median(err))
+    const keep = use.filter((_, i) => err[i] <= cut)
+    if (keep.length === use.length || keep.length < 2) break
+    use = keep
+    fit = fitSim(use, SIM_I, 0.02)
+  }
+  return fit
+}
+
+/**
+ * Give every sighting the hold it really shows. The frames are chained one to
+ * the next (so an id that jumps is an outlier for one step, not a wrong anchor
+ * for the whole clip), every sighting is placed on that rough canvas, and each
+ * track is cut into the separate spots it visited.
+ */
+function consistentLabels(sightings: Sighting[], sampleTimes: number[], aspect: number, holdUnit: number): number[] {
+  const N = sampleTimes.length
+  const iso = (c: Vec2): Vec2 => [c[0] * aspect, c[1]]
+  const bySample: number[][] = Array.from({ length: N }, () => [])
+  sightings.forEach((s, k) => { if (s.sample >= 0 && s.sample < N) bySample[s.sample].push(k) })
+  let ref = 0
+  for (let i = 1; i < N; i++) if (bySample[i].length > bySample[ref].length) ref = i
+  const T: (Sim | null)[] = new Array(N).fill(null)
+  T[ref] = SIM_I
+  const place = (i: number, dir: 1 | -1) => {
+    for (let back = 1; back <= 8; back++) {
+      const j = i - dir * back
+      if (j < 0 || j >= N || !T[j]) continue
+      const there = new Map(bySample[j].map((k) => [sightings[k].track, sightings[k]]))
+      const pairs = bySample[i].filter((k) => there.has(sightings[k].track)).map((k) => {
+        const a = sightings[k], b = there.get(a.track)!
+        return { p: iso(a.c), q: iso(b.c), w: Math.min(a.w, b.w) }
+      })
+      const rel = pairs.length ? chainFit(pairs, holdUnit) : null
+      if (rel && absolutelyPlausible(rel)) { T[i] = simCompose(T[j]!, rel); return }
+    }
+  }
+  for (let i = ref + 1; i < N; i++) place(i, 1)
+  for (let i = ref - 1; i >= 0; i--) place(i, -1)
+
+  const labels = new Array<number>(sightings.length).fill(-1)
+  const clusters = new Map<number, { x: number; y: number; n: number; members: number[] }[]>()
+  const order = sightings.map((_, k) => k).sort((a, b) => sightings[a].sample - sightings[b].sample)
+  for (const k of order) {
+    const s = sightings[k], t = T[s.sample]
+    if (!t) continue
+    const q = simApply(t, iso(s.c))
+    const reach = 1.25 * Math.max(holdUnit, (s.size ?? holdUnit) * Math.hypot(t.a, t.b))
+    const list = clusters.get(s.track) ?? []
+    let best: (typeof list)[number] | null = null, bestD = reach
+    for (const c of list) { const d = Math.hypot(c.x - q[0], c.y - q[1]); if (d <= bestD) { bestD = d; best = c } }
+    if (best) { best.x = (best.x * best.n + q[0]) / (best.n + 1); best.y = (best.y * best.n + q[1]) / (best.n + 1); best.n++; best.members.push(k) }
+    else list.push({ x: q[0], y: q[1], n: 1, members: [k] })
+    clusters.set(s.track, list)
+  }
+  let next = 0
+  for (const list of clusters.values()) for (const c of list) {
+    if (c.n >= 3) { for (const k of c.members) labels[k] = next; next++ }
+  }
+  return labels
 }
 
 /**
  * Register every sampled frame to one wall canvas.
  * `holdUnit` is the median hold height in video units; tolerances scale with it.
  */
-export function registerCamera(sightings: Sighting[], sampleTimes: number[], aspect: number, holdUnit: number): Registration {
+export function registerCamera(input: Sighting[], sampleTimes: number[], aspect: number, holdUnit: number): Registration {
   const N = sampleTimes.length
+  const labels = consistentLabels(input, sampleTimes, aspect, holdUnit)
+  // From here on a "track" is a label: one hold, on one spot of the wall.
+  const sightings: Sighting[] = []
+  input.forEach((s, k) => { if (labels[k] >= 0) sightings.push({ ...s, track: labels[k] }) })
   const iso = (c: Vec2): Vec2 => [c[0] * aspect, c[1]]
   // Misfit is judged in each hold's own size, never less than a typical hold.
   const unitOf = new Map<number, number>()
@@ -236,14 +313,25 @@ export function registerCamera(sightings: Sighting[], sampleTimes: number[], asp
 
   let exclude = new Set<number>()
   let r = run(exclude)
-  if (!r) return { mode: 'handheld', toCanvas: new Array(N).fill(null), residual: new Array(N).fill(null), moving: [], reference: 0, aspect }
+  if (!r) return { mode: 'handheld', toCanvas: new Array(N).fill(null), residual: new Array(N).fill(null), moving: [], reference: 0, aspect, labels }
   // Something green that moves against the wall (a shoe, a shirt, a chalk bag)
   // is not a hold: drop it and fit again.
-  const moving = [...r.trackErr].filter(([, e]) => e.length >= 3 && median(e) > 0.75).map(([t]) => t)
-  if (moving.length) {
-    exclude = new Set(moving)
+  const movingLabels = [...r.trackErr].filter(([, e]) => e.length >= 3 && median(e) > 0.75).map(([t]) => t)
+  if (movingLabels.length) {
+    exclude = new Set(movingLabels)
     r = run(exclude) ?? r
   }
+  // A raw track is "moving" when most of what it showed never settled anywhere:
+  // strays, or spots that slid against the wall.
+  const seen = new Map<number, [number, number]>()
+  input.forEach((s, k) => {
+    const c = seen.get(s.track) ?? [0, 0]
+    c[0]++
+    if (labels[k] < 0 || exclude.has(labels[k])) c[1]++
+    seen.set(s.track, c)
+  })
+  const moving = [...seen].filter(([, [n, bad]]) => n >= 3 && bad > n / 2).map(([t]) => t)
+  for (const k of labels.keys()) if (labels[k] >= 0 && exclude.has(labels[k])) labels[k] = -1
   // A still camera: every frame within a hair of the reference. Snap to the
   // identity so tripod footage reads exactly as the pipeline reads it.
   const centre: Vec2 = [0.5 * aspect, 0.5]
@@ -255,9 +343,9 @@ export function registerCamera(sightings: Sighting[], sampleTimes: number[], asp
   const toAffine = (s: Sim): Affine => compose([[s.a, -s.b, s.tx], [s.b, s.a, s.ty]], [[aspect, 0, 0], [0, 1, 0]])
   if (still) {
     const iso0 = toAffine(SIM_I)
-    return { mode: 'still', toCanvas: new Array(N).fill(iso0), residual: r.residual, moving, reference: r.ref, aspect }
+    return { mode: 'still', toCanvas: new Array(N).fill(iso0), residual: r.residual, moving, reference: r.ref, aspect, labels }
   }
-  return { mode: 'handheld', toCanvas: r.T.map((s) => (s ? toAffine(s) : null)), residual: r.residual, moving, reference: r.ref, aspect }
+  return { mode: 'handheld', toCanvas: r.T.map((s) => (s ? toAffine(s) : null)), residual: r.residual, moving, reference: r.ref, aspect, labels }
 }
 
 /** Huber-reweighted fit: a hold whose misfit is far above the rest counts less. */

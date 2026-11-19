@@ -99,7 +99,7 @@ export function ImportView({ health, onHealth, onSession }: { health: Health | n
       await new Promise((res) => setTimeout(res, 50))
       let reading: Reading
       try {
-        reading = readRoute({ sam: r.sam, pose: r.pose, frame: { width: r.analysis.width, height: r.analysis.height, duration: r.analysis.duration }, color: routeColor })
+        reading = readRoute({ sam: r.sam, pose: r.pose, frame: { width: r.analysis.width, height: r.analysis.height, duration: r.analysis.duration }, color: routeColor, anchors: r.anchors ?? undefined })
       } catch (e) {
         throw new StageError((e as Error).message, 'analyzing_moves')
       }

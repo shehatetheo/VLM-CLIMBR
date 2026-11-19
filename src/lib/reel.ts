@@ -55,7 +55,7 @@ export interface Reel {
   s: Session
   tl: Timeline
   clip: number // seconds of video
-  finale: { relight: number; step: number; summary: number; total: number }
+  finale: { relight: number; step: number; summary: number; send: number; total: number }
   total: number
   wall: CanvasImageSource | null
   order: { id: number; time: number; color: string }[] // holds in the order they were first used
@@ -74,7 +74,10 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
   const order = [...tl.firstUse.entries()].sort((a, b) => a[1].time - b[1].time).map(([id, f]) => ({ id, time: f.time, color: holdFill(s, id) }))
   const torso = (s.torso ?? []).filter((p) => p[0] >= 0 && p[0] <= tl.climbEnd)
   const step = order.length > 14 ? 0.22 : 0.32
-  const finale = { relight: 0.9, step, summary: 0.9 + order.length * step + 0.4, total: 0.9 + order.length * step + 0.4 + 3.2 }
+  const status = climbStatus(s)
+  const summary = 0.9 + order.length * step + 0.4
+  // A send gets its moment: the burst, the sticker, the score counting up.
+  const finale = { relight: 0.9, step, summary, send: status.status === 'sent' ? summary + 0.25 : Infinity, total: summary + (status.status === 'sent' ? 5.2 : 3.2) }
   let meters: Reel['meters'] = null
   if (s.scale && order.length) {
     const aspect = s.canvas.width / s.canvas.height
@@ -86,7 +89,7 @@ export function prepareReel(s: Session, tl: Timeline, clip: number, wall: Canvas
   }
   const insights = coachInsights(s)
   const line = insights.find((i) => i.kind === 'fix')?.short ?? insights.find((i) => i.kind === 'good')?.title ?? verdict(s, insights)
-  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status: climbStatus(s), look: currentLook(), logo: art.logo ?? null, bareClip: art.bareClip ?? false }
+  return { s, tl, clip, finale, total: clip + finale.total, wall, order, torso, meters, score: coachScore(s), line, status, look: currentLook(), logo: art.logo ?? null, bareClip: art.bareClip ?? false }
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -184,7 +187,7 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   glow.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
-  drawBackdropArt(ctx, W, H, u, look)
+  drawBackdropArt(ctx, W, H, u, look, r)
 
   drawHeader(ctx, R, L.header, u, t, inFinale, route)
 
@@ -202,6 +205,24 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
     drawClipOverlay(ctx, R, box, t, u * (box.h / (L.portrait ? 900 : 880)), route)
     ctx.restore()
     chromeFrame(ctx, panel, 18 * u, u, 1 - k)
+    // The moment of the top-out: the frame rings gold.
+    const since = t - tl.climbEnd
+    if (s.toppedOut && since >= 0 && since < 1.2) {
+      ctx.save()
+      for (let i = 0; i < 2; i++) {
+        const q = clamp01((since - i * 0.18) / 1)
+        if (q <= 0 || q >= 1) continue
+        ctx.globalAlpha = (1 - q) * (1 - k)
+        ctx.lineWidth = (14 - 10 * q) * u
+        ctx.strokeStyle = GOLD
+        ctx.shadowColor = GOLD
+        ctx.shadowBlur = 30 * u
+        const grow = 26 * u * q
+        roundRect(ctx, panel.x - grow, panel.y - grow, panel.w + 2 * grow, panel.h + 2 * grow, 18 * u + grow)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
   }
 
   // ── the wall ──
@@ -221,6 +242,7 @@ export function drawReel(ctx: CanvasRenderingContext2D, R: Reel, frame: CanvasIm
   // Under a wide clip, the numbers grow into the clip's place as it fades.
   const statsRect = mix(L.stats, under ? { ...L.stats, y: L.body.y, h: L.body.h } : statsEnd, k)
   const coached = drawStats(ctx, R, statsRect, u, t, inFinale ? f : -1, route, L.portrait)
+  if (inFinale && f >= R.finale.send) drawSendBurst(ctx, mapRect, f - R.finale.send, u, look, route)
   // Where the numbers had no room for the coach's line, it captions the wall.
   if (inFinale && !coached) {
     const a = clamp01((f - R.finale.summary) / 0.6)
@@ -347,6 +369,20 @@ function drawWall(ctx: CanvasRenderingContext2D, R: Reel, panel: Rect, u: number
     ctx.restore()
   }
 
+  // As the wall takes the stage, one pass of light down it: the scan.
+  if (finale && f > 0.1 && f < 1.3) {
+    const q = (f - 0.1) / 1.2, y = box.y + box.h * q, band = 110 * u
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = Math.sin(Math.PI * q) ** 0.5
+    const g = ctx.createLinearGradient(0, y - band, 0, y + 6 * u)
+    g.addColorStop(0, hexA(R.look.art, 0))
+    g.addColorStop(0.85, hexA(R.look.art, 0.35))
+    g.addColorStop(1, 'rgba(255,255,255,0.9)')
+    ctx.fillStyle = g
+    ctx.fillRect(box.x, y - band, box.w, band + 6 * u)
+    ctx.restore()
+  }
   const tc = Math.max(0, Math.min(t, tl.climbEnd))
   const lit = new Set(tl.litAt(tc)) // the same clock as the numbers below
   const holdingNow = new Map(LIMBS.map((l) => [l.key, finale ? null : tl.limbAt(l.key, tc).holdId] as const))
@@ -504,7 +540,8 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
     if (area.h > 70 * uz && area.w > 260 * uz) {
       coached = true
       const rr = Math.min(area.h * 0.46, area.w * 0.2, 86 * uz)
-      scoreRing(ctx, area.x + rr, area.y + Math.min(area.h / 2, rr + 6 * uz), rr, R.score.total, look)
+      const counted = Math.round(R.score.total * (1 - (1 - clamp01((f - R.finale.summary - 0.3) / 1.1)) ** 3))
+      scoreRing(ctx, area.x + rr, area.y + Math.min(area.h / 2, rr + 6 * uz), rr, counted, look)
       const tx = area.x + 2 * rr + 24 * uz, tw = area.x + area.w - tx
       ctx.textAlign = 'left'
       ctx.fillStyle = '#fff'
@@ -528,7 +565,7 @@ function drawStats(ctx: CanvasRenderingContext2D, R: Reel, box: Rect, u: number,
       [String(s.moves.length), 'moves', false],
     ]
     if (R.meters && R.meters.climbed > 0.2) facts.push([`≈${R.meters.climbed.toFixed(1)}m`, 'body rose', false])
-    tiles(ctx, { x: B.x, y: cy, w: B.w, h: B.y + B.h - cy }, facts, uz)
+    tiles(ctx, { x: B.x, y: cy, w: B.w, h: B.y + B.h - cy }, facts, uz, f - R.finale.summary - 0.5)
     ctx.globalAlpha = 1
   }
   ctx.restore()
@@ -650,7 +687,7 @@ function chromeFrame(ctx: CanvasRenderingContext2D, b: Rect, r: number, u: numbe
   ctx.restore()
 }
 /** Small glass tiles in a row: a big number over a lowercase label. */
-function tiles(ctx: CanvasRenderingContext2D, b: Rect, items: [string, string, boolean][], u: number) {
+function tiles(ctx: CanvasRenderingContext2D, b: Rect, items: [string, string, boolean][], u: number, pop = Infinity) {
   const gap = 12 * u, n = items.length
   // Four tiles in a narrow column go two by two, when there is height for it.
   const twoRows = n === 4 && (b.w - gap * 3) / 4 < 130 * u && b.h >= 2 * 72 * u + gap
@@ -663,8 +700,12 @@ function tiles(ctx: CanvasRenderingContext2D, b: Rect, items: [string, string, b
   ctx.font = `700 ${size}px ${FONT}`
   const widest = Math.max(...items.map(([v]) => ctx.measureText(v).width))
   if (widest > w - 24 * u) size *= (w - 24 * u) / widest
+  const alpha0 = ctx.globalAlpha
   items.forEach(([v, label, gold], i) => {
-    const x = b.x + (i % perRow) * (w + gap), y0 = b.y + Math.floor(i / perRow) * (h + gap)
+    // `pop`: seconds since the tiles began to arrive, one after the other.
+    const k = clamp01((pop - i * 0.14) / 0.35), rise = (1 - (1 - (1 - k) ** 3)) * 22 * u
+    ctx.globalAlpha = alpha0 * k
+    const x = b.x + (i % perRow) * (w + gap), y0 = b.y + Math.floor(i / perRow) * (h + gap) + rise
     roundRect(ctx, x, y0, w, h, 16 * u)
     const fill = ctx.createLinearGradient(0, y0, 0, y0 + h)
     fill.addColorStop(0, 'rgba(255,255,255,0.12)')
@@ -680,6 +721,7 @@ function tiles(ctx: CanvasRenderingContext2D, b: Rect, items: [string, string, b
     ctx.font = `600 ${Math.min(15 * u, h * 0.16)}px ${FONT}`
     ctx.fillText(ellipsis(ctx, label, w - 24 * u), x + 14 * u, y0 + h * 0.82)
   })
+  ctx.globalAlpha = alpha0
 }
 /** The sequence as glossy gel badges, newest last and a little bigger. As many
  *  rows as fit; when they run out, the latest holds stay. */
@@ -794,44 +836,143 @@ function sticker(ctx: CanvasRenderingContext2D, status: StatusRead['status'], x:
   ctx.restore()
 }
 /** Decoration behind everything: a ring burst, a halftone corner, a few stars. */
-function drawBackdropArt(ctx: CanvasRenderingContext2D, W: number, H: number, u: number, look: Look) {
+function drawBackdropArt(ctx: CanvasRenderingContext2D, W: number, H: number, u: number, look: Look, time = 0) {
   ctx.save()
   const m = Math.min(W, H)
-  ctx.globalAlpha = 0.07
+  // aurora: three soft lights, drifting
+  ctx.globalCompositeOperation = 'lighter'
+  for (const [ax, ay, rad, sp, ph] of [[0.2, 0.22, 0.6, 0.05, 0], [0.86, 0.56, 0.55, 0.04, 2.1], [0.4, 0.92, 0.62, 0.03, 4.2]]) {
+    const cx = W * (ax + 0.09 * Math.sin(time * sp * 2 * Math.PI + ph)), cy = H * (ay + 0.06 * Math.cos(time * sp * 1.7 * Math.PI + ph))
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, m * rad)
+    g.addColorStop(0, hexA(look.art, 0.15))
+    g.addColorStop(1, hexA(look.art, 0))
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  }
+  ctx.globalCompositeOperation = 'source-over'
+  // speaker-cone rings from the corner, travelling outward
   ctx.fillStyle = look.art
-  for (let i = 0; i < 5; i++) {
+  const gap = 0.09, n = 7, phase = (time * 0.02) % gap
+  for (let i = 0; i < n; i++) {
+    const r0 = i * gap + phase
+    ctx.globalAlpha = 0.09 * Math.sin(Math.PI * Math.min(1, r0 / (n * gap)) ** 0.6)
     ctx.beginPath()
-    ctx.arc(W * 0.02, H * 0.98, m * (0.5 - i * 0.09), 0, Math.PI * 2)
-    ctx.arc(W * 0.02, H * 0.98, m * (0.455 - i * 0.09), 0, Math.PI * 2, true)
+    ctx.arc(W * 0.02, H * 0.98, m * (r0 + 0.045), 0, Math.PI * 2)
+    ctx.arc(W * 0.02, H * 0.98, m * r0, 0, Math.PI * 2, true)
     ctx.fill()
   }
+  // halftone corner, with a slow wave through it
   const step = 22 * u
   for (let y = 0; y < m * 0.42; y += step) {
     for (let x = 0; x < m * 0.5; x += step) {
       const d = Math.hypot(x, y) / (m * 0.5)
       if (d > 1) continue
-      ctx.globalAlpha = 0.14 * (1 - d)
+      const wave = 0.5 + 0.5 * Math.sin(time * 1.3 - d * 7)
+      ctx.globalAlpha = 0.16 * (1 - d) * (0.55 + 0.45 * wave)
       ctx.beginPath()
-      ctx.arc(W - x - step, y + step, 5 * u * (1 - d * 0.6), 0, Math.PI * 2)
+      ctx.arc(W - x - step, y + step, 5 * u * (1 - d * 0.6) * (0.85 + 0.25 * wave), 0, Math.PI * 2)
       ctx.fill()
     }
   }
-  ctx.globalAlpha = 0.22
-  ctx.strokeStyle = look.art
-  ctx.lineJoin = 'round'
-  for (const [sx, sy, sr] of [[0.94, 0.52, 18], [0.06, 0.18, 14], [0.52, 0.97, 12], [0.8, 0.88, 9]] as const) {
-    const cx = W * sx, cy = H * sy, R0 = sr * u
+  // glass bubbles, rising
+  for (let i = 0; i < 11; i++) {
+    const seed = (i * 0.618034) % 1, seed2 = (i * 0.381966 + 0.13) % 1
+    const rr = (9 + 26 * seed2) * u, speed = 0.012 + 0.018 * seed
+    const life = (time * speed + seed2 * 1.3) % 1.3
+    const x = W * (0.04 + 0.92 * seed) + Math.sin(time * (0.5 + seed) + i) * 14 * u, y = H * (1.12 - life)
+    const fade = Math.min(1, life / 0.15, (1.3 - life) / 0.2)
+    ctx.globalAlpha = 0.5 * fade
+    const g = ctx.createRadialGradient(x - rr * 0.35, y - rr * 0.4, rr * 0.05, x, y, rr)
+    g.addColorStop(0, 'rgba(255,255,255,0.34)')
+    g.addColorStop(0.35, 'rgba(255,255,255,0.05)')
+    g.addColorStop(1, hexA(look.art, 0.2))
+    ctx.fillStyle = g
     ctx.beginPath()
-    for (let i = 0; i < 10; i++) {
-      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R0 * 0.42 : R0
-      ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
-    }
-    ctx.closePath()
-    ctx.lineWidth = 3 * u
+    ctx.arc(x, y, rr, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.lineWidth = 1.4 * u
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
     ctx.stroke()
   }
+  // stars that twinkle and turn
+  ctx.strokeStyle = look.art
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = 3 * u
+  const stars: [number, number, number][] = [[0.94, 0.52, 18], [0.06, 0.18, 14], [0.52, 0.97, 12], [0.8, 0.88, 9], [0.3, 0.035, 8], [0.97, 0.3, 10], [0.045, 0.62, 9]]
+  stars.forEach(([sx, sy, sr], i) => {
+    const tw = 0.5 + 0.5 * Math.sin(time * (1.1 + 0.23 * i) + i * 1.9)
+    ctx.globalAlpha = 0.12 + 0.26 * tw
+    starPath(ctx, W * sx, H * sy, sr * u * (0.85 + 0.3 * tw), time * 0.15 * (i % 2 ? 1 : -1) + i)
+    ctx.stroke()
+  })
   ctx.restore()
 }
+
+/** A five-point star, as the current path. */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, R0: number, rot = 0) {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const a = rot - Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R0 * 0.42 : R0
+    ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
+  }
+  ctx.closePath()
+}
+
+/** The send, celebrated: rings out from the middle, stars and dots thrown wide,
+ *  and the SENT! sticker slapped on. `tau` is seconds since it began. */
+function drawSendBurst(ctx: CanvasRenderingContext2D, box: Rect, tau: number, u: number, look: Look, route: string) {
+  if (tau < 0) return
+  const cx = box.x + box.w / 2, cy = box.y + box.h * 0.46
+  ctx.save()
+  roundClip(ctx, box, 18 * u)
+  // a flash, then rings
+  if (tau < 0.5) {
+    ctx.globalAlpha = 0.55 * (1 - tau / 0.5)
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, box.w * 0.7)
+    g.addColorStop(0, '#fff')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(box.x, box.y, box.w, box.h)
+  }
+  for (let i = 0; i < 3; i++) {
+    const k = (tau - i * 0.16) / 1.1
+    if (k <= 0 || k >= 1) continue
+    ctx.globalAlpha = 0.8 * (1 - k)
+    ctx.lineWidth = (10 - 7 * k) * u
+    ctx.strokeStyle = i === 1 ? '#fff' : look.a
+    ctx.beginPath()
+    ctx.arc(cx, cy, box.w * (0.08 + 0.62 * (1 - (1 - k) ** 3)), 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  // confetti: stars and dots, thrown out and falling
+  const colors = [look.a, '#ffffff', GOLD, route, look.art]
+  for (let i = 0; i < 46; i++) {
+    const a = i * 2.39996, sp = (0.34 + 0.5 * ((i * 0.618034) % 1)) * box.w
+    const k = Math.min(tau, 3)
+    const x = cx + Math.cos(a) * sp * (1 - Math.exp(-2.4 * k)), y = cy + Math.sin(a) * sp * (1 - Math.exp(-2.4 * k)) * 0.8 + 170 * u * k * k * 0.5
+    const fade = clamp01(1 - (tau - 1.5) / 1.1)
+    if (fade <= 0) continue
+    ctx.globalAlpha = fade
+    ctx.fillStyle = colors[i % colors.length]
+    const size = (7 + 9 * ((i * 0.381966) % 1)) * u
+    if (i % 3) { starPath(ctx, x, y, size, tau * (2 + (i % 5)) + i); ctx.fill() }
+    else { ctx.beginPath(); ctx.arc(x, y, size * 0.5, 0, Math.PI * 2); ctx.fill() }
+  }
+  ctx.restore()
+  // the sticker: slapped on big, with a bounce, then resting
+  const slap = clamp01(tau / 0.42)
+  const bounce = slap < 1 ? 2.6 - 1.6 * (1 - (1 - slap) ** 3) + 0.0 : 1 + 0.07 * Math.exp(-5 * (tau - 0.42)) * Math.cos(16 * (tau - 0.42))
+  // ...and once the burst has had its moment, it steps down out of the route's way.
+  const rest = ease(clamp01((tau - 1.5) / 0.7))
+  const su = u * lerp(4.2, 2.7, rest) * bounce, sy = lerp(cy, box.y + box.h - 74 * u, rest)
+  ctx.save()
+  ctx.globalAlpha = clamp01(tau / 0.12)
+  ctx.font = `700 ${16 * su}px ${FONT}`
+  const sw = ctx.measureText('SENT!').width + 28 * su
+  sticker(ctx, 'sent', cx - sw / 2, sy - 16 * su, su)
+  ctx.restore()
+}
+
 function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {
   const lines: string[] = ['']
   for (const w of text.split(/\s+/)) {
